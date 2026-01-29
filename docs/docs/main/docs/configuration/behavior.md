@@ -34,6 +34,23 @@ The `one_shot` sub-table configures one-shot modifiers or one-shot layers (OSM/O
 timeout = "5s"
 ```
 
+## Mouse
+
+The `mouse` sub-table configures mouse key / wheel behavior (use_config only). Use it to adjust scroll distance and repeat speed when you have mouse wheel keys in your keymap.
+
+```toml
+[behavior.mouse]
+wheel_delta = 1                    # scroll distance per step (default: 1)
+wheel_repeat_interval_ms = 80      # ms between repeats when holding (default: 80)
+# wheel_initial_delay_ms = 100       # delay before first repeat
+# wheel_max_speed_multiplier = 3
+# wheel_time_to_max = 40
+# wheel_max = 4
+```
+
+- `wheel_delta`: Scroll distance per step; larger values scroll more per key press.
+- `wheel_repeat_interval_ms`: Time between scroll steps when the key is held; larger values scroll slower.
+
 ## Combo
 
 In the `combo` sub-table, you can configure the keyboard's combo key functionality. Combo allows you to define a group of keys that, when pressed simultaneously, will trigger a specific output action.

@@ -625,6 +625,20 @@ pub struct BehaviorConfig {
     pub macros: Option<MacrosConfig>,
     pub fork: Option<ForksConfig>,
     pub morse: Option<MorsesConfig>,
+    /// Mouse key / wheel behavior (wheel_delta, wheel_repeat_interval_ms, etc.)
+    pub mouse: Option<MouseKeyTomlConfig>,
+}
+
+/// Mouse key config for keyboard.toml [behavior.mouse]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MouseKeyTomlConfig {
+    pub wheel_delta: Option<u8>,
+    pub wheel_repeat_interval_ms: Option<u16>,
+    pub wheel_initial_delay_ms: Option<u16>,
+    pub wheel_max_speed_multiplier: Option<u8>,
+    pub wheel_time_to_max: Option<u8>,
+    pub wheel_max: Option<u8>,
 }
 
 /// Per Key configurations profiles for morse, tap-hold, etc.

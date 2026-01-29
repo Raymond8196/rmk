@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use quote::quote;
 use rmk_config::{
     CombosConfig, ForksConfig, KeyboardTomlConfig, MacrosConfig, MorseActionPair, MorseConfig, MorseProfile,
-    MorsesConfig, OneShotConfig, TriLayerConfig,
+    MouseKeyTomlConfig, MorsesConfig, OneShotConfig, TriLayerConfig,
 };
 
 use crate::layout::{get_key_with_alias, parse_key};
@@ -507,6 +507,31 @@ fn expand_forks(
     }
 }
 
+fn expand_mouse_key_config(mouse: &Option<MouseKeyTomlConfig>) -> proc_macro2::TokenStream {
+    match mouse {
+        Some(m) => {
+            let wheel_delta = m.wheel_delta.unwrap_or(1);
+            let wheel_repeat_interval_ms = m.wheel_repeat_interval_ms.unwrap_or(80);
+            let wheel_initial_delay_ms = m.wheel_initial_delay_ms.unwrap_or(100);
+            let wheel_max_speed_multiplier = m.wheel_max_speed_multiplier.unwrap_or(3);
+            let wheel_time_to_max = m.wheel_time_to_max.unwrap_or(40);
+            let wheel_max = m.wheel_max.unwrap_or(4);
+            quote! {
+                ::rmk::config::MouseKeyConfig {
+                    wheel_delta: #wheel_delta,
+                    wheel_repeat_interval_ms: #wheel_repeat_interval_ms,
+                    wheel_initial_delay_ms: #wheel_initial_delay_ms,
+                    wheel_max_speed_multiplier: #wheel_max_speed_multiplier,
+                    wheel_time_to_max: #wheel_time_to_max,
+                    wheel_max: #wheel_max,
+                    ..::rmk::config::MouseKeyConfig::default()
+                }
+            }
+        }
+        None => quote! { ::rmk::config::MouseKeyConfig::default() },
+    }
+}
+
 pub(crate) fn expand_behavior_config(keyboard_config: &KeyboardTomlConfig) -> proc_macro2::TokenStream {
     let profiles = &keyboard_config
         .get_behavior_config()
@@ -520,6 +545,7 @@ pub(crate) fn expand_behavior_config(keyboard_config: &KeyboardTomlConfig) -> pr
     let macros = expand_macros(&behavior.macros);
     let forks = expand_forks(&behavior.fork, profiles);
     let morse = expand_morse(&behavior.morse);
+    let mouse_key = expand_mouse_key_config(&behavior.mouse);
 
     quote! {
         #[allow(clippy::needless_update)]
@@ -530,7 +556,7 @@ pub(crate) fn expand_behavior_config(keyboard_config: &KeyboardTomlConfig) -> pr
             fork: #forks,
             morse: #morse,
             keyboard_macros: #macros,
-            mouse_key: ::rmk::config::MouseKeyConfig::default(),
+            mouse_key: #mouse_key,
             tap: ::rmk::config::TapConfig::default(),
         };
     }

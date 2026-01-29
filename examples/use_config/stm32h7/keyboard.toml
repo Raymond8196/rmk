@@ -13,6 +13,11 @@ col_pins = ["PE13", "PE14", "PE15"]
 # RMK uses col2row as the default matrix diode direction, if you want to use a row2col matrix, add `row2col = true`
 # row2col = true
 
+# Optional: mouse wheel / mouse key behavior (use_config only)
+[behavior.mouse]
+wheel_delta = 1                   # scroll distance per step (default: 1)
+wheel_repeat_interval_ms = 80     # ms between repeats when holding (default: 80)
+
 [layout]
 rows = 4
 cols = 3
