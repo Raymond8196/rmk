@@ -1,0 +1,3 @@
+[submodule "elink-protocol"]
+	path = elink-protocol
+	url = git@github.com:Raymond8196/elink-protocol.git
