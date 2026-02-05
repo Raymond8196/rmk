@@ -8,6 +8,8 @@ pub mod ble;
 pub mod central;
 /// Common abstraction layer of split driver
 pub(crate) mod driver;
+#[cfg(feature = "elink")]
+pub mod elink;
 pub mod peripheral;
 #[cfg(feature = "rp2040")]
 pub mod rp;

@@ -15,7 +15,7 @@ rmk-macro = { version = "=0.7.1", path = "../rmk-macro" }
 rmk-types = { version = "=0.2.2", path = "../rmk-types" }
 # ELink protocol support
 elink-core = { path = "../elink-protocol/elink-core", default-features = false, optional = true }
-elink-rmk-adapter = { path = "../elink-protocol/elink-rmk-adapter", optional = true }
+elink-rmk-adapter = { path = "../elink-protocol/elink-rmk-adapter", default-features = false, optional = true }
 embedded-hal = { version = "1.0.0" }
 embedded-hal-async = { version = "1.0.0" }
 embedded-io-async = { version = "0.6" }
@@ -179,6 +179,7 @@ split = ["controller", "trouble-host?/gatt-client-notification-queue-size-4"]
 ## Enable ELink protocol support for split keyboard communication
 ## This provides enhanced communication protocol with larger frame size (up to 1024 bytes),
 ## priority arbitration, and multi-device support
+## When disabled, the ELink code is completely excluded from compilation, saving firmware size
 elink = ["dep:elink-core", "dep:elink-rmk-adapter"]
 
 ## Enable feature to use rp2040 specific features, like PIO and bootrom
