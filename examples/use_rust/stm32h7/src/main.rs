@@ -8,6 +8,10 @@ mod macros;
 mod keymap;
 mod vial;
 
+#[cfg(feature = "elink")]
+#[cfg(feature = "elink_test")]
+mod elink_test;
+
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_stm32::flash::Flash;
@@ -16,6 +20,8 @@ use embassy_stm32::peripherals::USB_OTG_HS;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb::{Driver, InterruptHandler};
 use embassy_stm32::{Config, bind_interrupts};
+#[cfg(all(feature = "elink", feature = "elink_test"))]
+use embassy_time::{Timer, Duration};
 use keymap::{COL, ROW};
 use rmk::channel::EVENT_CHANNEL;
 use rmk::config::{BehaviorConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig};
@@ -126,6 +132,18 @@ async fn main(_spawner: Spawner) {
     let debouncer = DefaultDebouncer::new();
     let mut matrix = Matrix::<_, _, _, ROW, COL, true>::new(row_pins, col_pins, debouncer);
     let mut keyboard = Keyboard::new(&keymap);
+
+    // ELink 测试模式（如果启用）
+    #[cfg(all(feature = "elink", feature = "elink_test"))]
+    {
+        info!("ELink 测试模式已启用");
+        info!("等待 2 秒后开始测试...");
+        Timer::after(Duration::from_secs(2)).await;
+        
+        elink_test::run_all_tests().await;
+        
+        info!("ELink 测试完成，继续正常运行...");
+    }
 
     // Start
     join3(
