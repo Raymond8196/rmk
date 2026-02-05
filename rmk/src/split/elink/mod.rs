@@ -84,29 +84,35 @@ impl<T: Read + Write> ElinkSplitDriver<T> {
 impl<T: Read + Write> SplitReader for ElinkSplitDriver<T> {
     async fn read(&mut self) -> Result<SplitMessage, SplitDriverError> {
         // Read bytes from transport and feed to adapter
-        let mut temp_buffer = [0u8; 256];
+        // Optimized buffer size: 128 bytes is enough for 1-2 ELink frames (max 64 bytes each)
+        let mut temp_buffer = [0u8; 128];
 
         loop {
-            // Try to read available data from transport
+            // Try to read available data from transport first
+            // This is more efficient: only check adapter buffer when transport has no data
             match self.transport.read(&mut temp_buffer).await {
                 Ok(bytes_read) => {
                     if bytes_read == 0 {
-                        // No data available, but check if adapter has a complete message
-                        // from previous reads
+                        // No data available from transport, check adapter buffer
+                        // This handles cases where previous reads left frames in buffer
                         match self.adapter.process_incoming_bytes(&[]) {
-                            Ok(Some(message_bytes)) => match postcard::from_bytes::<SplitMessage>(message_bytes) {
-                                Ok(message) => return Ok(message),
-                                Err(e) => {
-                                    error!("Postcard deserialize error: {}", e);
-                                    return Err(SplitDriverError::DeserializeError);
+                            Ok(Some(message_bytes)) => {
+                                // Found a message in buffer, deserialize and return it
+                                match postcard::from_bytes::<SplitMessage>(message_bytes) {
+                                    Ok(message) => return Ok(message),
+                                    Err(e) => {
+                                        error!("Postcard deserialize error: {}", e);
+                                        return Err(SplitDriverError::DeserializeError);
+                                    }
                                 }
-                            },
+                            }
                             Ok(None) | Err(_) => {
-                                // No message available, wait for more data
+                                // No message available, return EmptyMessage
                                 return Err(SplitDriverError::EmptyMessage);
                             }
                         }
                     }
+
                     // Feed bytes to adapter
                     match self.adapter.process_incoming_bytes(&temp_buffer[..bytes_read]) {
                         Ok(Some(message_bytes)) => {
@@ -121,6 +127,7 @@ impl<T: Read + Write> SplitReader for ElinkSplitDriver<T> {
                         }
                         Ok(None) => {
                             // No complete message yet, continue reading
+                            // The loop will read more data on next iteration
                             continue;
                         }
                         Err(e) => {
