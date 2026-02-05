@@ -9,6 +9,7 @@
 
 #![allow(dead_code)]
 
+use core::result::Result::{Ok, Err};
 use defmt::{error, info, warn};
 use elink_rmk_adapter::ElinkAdapter;
 use embassy_time::{Duration, Instant, Timer};
