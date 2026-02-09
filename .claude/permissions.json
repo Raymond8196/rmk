@@ -1,0 +1,42 @@
+{
+  "preapprovedCommands": [
+    {
+      "command": "cargo",
+      "args": ["build", "check", "test", "fmt", "clippy", "clean", "doc"],
+      "description": "Safe Rust build and check commands"
+    },
+    {
+      "command": "git",
+      "args": ["status", "diff", "log", "branch", "show", "ls-files"],
+      "description": "Read-only git commands"
+    },
+    {
+      "command": "ls",
+      "args": ["-la", "-lh", "-R"],
+      "description": "List directory contents"
+    },
+    {
+      "command": "cat",
+      "args": [],
+      "description": "Read file contents"
+    },
+    {
+      "command": "find",
+      "args": ["-name", "-type", "-path"],
+      "description": "Find files"
+    },
+    {
+      "command": "grep",
+      "args": ["-r", "-i", "-n", "-l"],
+      "description": "Search file contents"
+    }
+  ],
+  "dangerousCommands": [
+    "rm -rf",
+    "git reset --hard",
+    "git push --force",
+    "cargo publish",
+    "dd"
+  ],
+  "note": "Preapproved commands avoid interrupting workflow (Boris Tip #10)"
+}

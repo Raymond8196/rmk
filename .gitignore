@@ -24,3 +24,4 @@ cyw43-firmware
 # rspress
 docs/dist
 docs/docs/v*
+.archive/
