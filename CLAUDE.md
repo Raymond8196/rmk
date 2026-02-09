@@ -652,6 +652,46 @@ Outdated protocol docs are worse than no docs - they create confusion and bugs.
 
 ---
 
+## Working with Uncertainty
+
+### When to Ask for Clarification
+
+**Always ask the user when:**
+
+1. **Requirements are ambiguous**
+   - Multiple valid interpretations exist
+   - Missing critical information about use case
+   - Unclear priorities or constraints
+
+2. **Design decisions need input**
+   - Trade-offs between different approaches
+   - User preferences matter (API design, naming)
+   - Breaking changes or compatibility concerns
+
+3. **Before making assumptions**
+   - About intended use cases
+   - About performance requirements
+   - About hardware constraints or target platforms
+
+4. **When uncertain about next steps**
+   - Multiple paths forward are possible
+   - Unclear which feature to prioritize
+   - Need more context about user's goals
+
+**Good questions:**
+- "Do you prefer X or Y approach? X has better performance but Y is simpler."
+- "What hardware are you targeting for testing?"
+- "Should this be a breaking change or maintain backward compatibility?"
+- "Which scenario is more important to you: A or B?"
+
+**Bad assumptions:**
+- Guessing user requirements without asking
+- Implementing features not explicitly requested
+- Making breaking changes without discussion
+- Assuming priorities without confirmation
+
+---
+
 ## Version History
 - 2026-02-09: Initial version, created based on Boris Cherny's 13 tips
   - Added language policy: All documentation/commits in English
