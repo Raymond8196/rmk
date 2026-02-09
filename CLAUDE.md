@@ -269,6 +269,18 @@ git add elink-protocol
 git commit -m "chore(elink): update submodule reference"
 ```
 
+### ❌ Prohibited in Commit Messages
+
+**NEVER include Co-Authored-By lines in commit messages**
+
+```bash
+# ❌ FORBIDDEN - Do NOT include these lines
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <...>
+```
+
+This project does not use co-author attribution for AI assistance. Commit messages should only credit human contributors if applicable.
+
 ## Common Mistakes and Prohibitions
 
 ### ❌ Absolutely Forbidden
