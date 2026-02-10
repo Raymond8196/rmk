@@ -83,6 +83,12 @@ pub mod controller {
     }
 }
 
-pub struct KeyMap<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_ENCODER: usize> {
+pub struct KeyMap<
+    'a,
+    const ROW: usize,
+    const COL: usize,
+    const NUM_LAYER: usize,
+    const NUM_ENCODER: usize,
+> {
     _phantom: core::marker::PhantomData<&'a ()>,
 }
