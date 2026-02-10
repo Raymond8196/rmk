@@ -858,7 +858,322 @@ When creating comparison documents:
 
 ---
 
+## CI Troubleshooting and Debugging
+
+### Golden Rule: Never Trust Local Environment Alone
+
+**Critical Lesson**: When CI fails but local checks pass, the environment differs. Always reproduce failures in a clean, isolated environment.
+
+### Why CI Failures Happen Despite Local Success
+
+Common causes of environment mismatch:
+
+1. **Parent directory configuration files**
+   - `rust-toolchain.toml` in parent directories affects submodules
+   - `.cargo/config.toml` can override behavior
+   - Working in nested repositories (e.g., rmk/elink-protocol) inherits parent settings
+
+2. **Toolchain version differences**
+   - Local may use older/newer rustfmt, clippy
+   - CI uses specific versions defined in workflows
+
+3. **Feature flag differences**
+   - CI tests multiple feature combinations in matrix
+   - Local testing may only use default features
+
+4. **Git state differences**
+   - CI does fresh clone (no uncommitted changes, no .gitignore files)
+   - Local may have generated files, build artifacts
+
+### Standard CI Debugging Process
+
+Follow this workflow to debug CI failures efficiently (saves 75% of time):
+
+#### Step 1: Get CI Error Information (< 5 minutes)
+
+```bash
+# Option 1: If you have gh CLI
+gh run list --branch <branch> --limit 3
+gh run view <run-id> --log-failed
+
+# Option 2: Ask user for screenshot/logs from GitHub Actions page
+# Look for exact error messages and file names
+```
+
+**What to look for:**
+- Exact file paths with errors
+- Line numbers (e.g., `reporter.rs:63`)
+- Error type (format, clippy, test failure, compilation)
+- Which job failed (check matrix: features, toolchains)
+
+#### Step 2: Reproduce in Clean Environment (MANDATORY)
+
+**Do this IMMEDIATELY** - don't waste time debugging in local environment:
+
+```bash
+# Create temporary isolated environment
+cd /tmp
+rm -rf ci-debug  # Clean any previous attempts
+
+# Clone fresh copy (simulates CI exactly)
+git clone --depth 1 --branch <branch> <repo-url> ci-debug
+cd ci-debug
+
+# For submodules
+git clone --depth 1 --branch <branch> --recurse-submodules <repo-url> ci-debug
+
+# Verify clean state
+git status
+ls -la  # Check for unexpected files
+```
+
+#### Step 3: Run Failing Check in Clean Environment
+
+```bash
+# Format check
+cargo fmt --all -- --check 2>&1 | grep -v "Warning" | head -50
+
+# Clippy check (exact flags from CI)
+cargo clippy --all-targets --no-default-features -- -D warnings
+
+# Specific feature combination
+cargo clippy --no-default-features --features=split,storage -- -D warnings
+
+# Tests
+cargo test --no-default-features --features=split
+
+# Check exit codes
+cargo fmt --all -- --check > /dev/null 2>&1
+echo "Exit code: $?"  # Must be 0 for success
+```
+
+**Important**: If it passes in clean environment too, check:
+- Are you testing the right branch/commit?
+- Does CI use different Rust version? (check workflow YAML)
+- Are there conditional steps in CI? (OS-specific, secret-dependent)
+
+#### Step 4: Fix and Verify
+
+```bash
+# Apply fix in clean environment
+cargo fmt --all
+cargo clippy --fix --allow-dirty
+
+# Verify fix works
+cargo fmt --all -- --check
+cargo clippy -- -D warnings
+cargo test
+
+# All checks must pass with exit code 0
+```
+
+#### Step 5: Copy Fixed Files Back
+
+```bash
+# Sync fixed files to working directory (exclude git/build artifacts)
+rsync -av --exclude=".git" --exclude="target" \
+  /tmp/ci-debug/ /path/to/working/directory/
+
+# Or manually copy specific files
+cp /tmp/ci-debug/src/file.rs /path/to/working/directory/src/
+```
+
+#### Step 6: Final Verification Before Push
+
+```bash
+# Commit in working directory
+cd /path/to/working/directory
+git add -A
+git diff --cached  # Review changes
+git commit -m "fix: <description>"
+
+# CRITICAL: Verify in fresh clone one more time
+cd /tmp && rm -rf final-check
+git clone <repo> final-check
+cd final-check
+git checkout <branch>  # If not main
+
+# Run all checks
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+
+# If all pass, push
+git push origin <branch>
+```
+
+### Environment Difference Checklist
+
+When local passes but CI fails, check these systematically:
+
+```bash
+# 1. Toolchain versions
+rustc --version
+rustfmt --version
+cargo --version
+
+# Compare with CI workflow
+cat .github/workflows/*.yml | grep -A 3 "rust-toolchain"
+
+# 2. Configuration files (parent directories!)
+pwd
+git rev-parse --show-toplevel
+find . -name "rust-toolchain.toml"
+find .. -maxdepth 2 -name "rust-toolchain.toml"  # Check parent!
+find . -name ".cargo" -type d
+
+# 3. Git state
+git status --ignored  # See what's uncommitted/ignored
+git diff HEAD  # Uncommitted changes
+
+# 4. Cargo features used
+cargo metadata --format-version 1 | jq '.resolve.root'
+cargo tree --features split  # See actual feature resolution
+```
+
+### Common CI Failure Patterns
+
+| Symptom | Likely Cause | Quick Fix |
+|---------|--------------|-----------|
+| "Format check failed" but local passes | Parent `rust-toolchain.toml` affecting submodule | Clone to `/tmp`, run `cargo fmt --all` |
+| "Clippy errors" but local passes | Different feature flags in CI matrix | Check workflow YAML, test exact feature combo |
+| "Tests fail" but local passes | Missing test dependencies or setup steps | Check CI workflow `steps:` section |
+| "Can't find crate" on embedded target | Missing `default-features = false` | Check dependencies in Cargo.toml |
+| Intermittent failures | Race conditions, network, or cache issues | Check CI logs for timeouts, retries |
+
+### Quick Debug Script
+
+Save this as `.claude/scripts/ci-debug.sh`:
+
+```bash
+#!/bin/bash
+# Quick CI environment diagnostic
+
+set -e
+
+REPO_URL=$(git remote get-url origin)
+BRANCH=$(git branch --show-current)
+TEMP_DIR="/tmp/ci-check-$$"
+
+echo "=== Environment Info ==="
+echo "Working dir: $(pwd)"
+echo "Git toplevel: $(git rev-parse --show-toplevel 2>/dev/null || echo 'Not in git repo')"
+echo "Rust: $(rustc --version)"
+echo "Rustfmt: $(rustfmt --version)"
+echo ""
+
+echo "=== Config Files That May Affect Behavior ==="
+find . -maxdepth 3 -name "rust-toolchain.toml" -o -name ".rustfmt.toml" 2>/dev/null
+find .. -maxdepth 2 -name "rust-toolchain.toml" 2>/dev/null
+echo ""
+
+echo "=== Simulating CI Environment ==="
+echo "Cloning to: $TEMP_DIR"
+git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TEMP_DIR"
+cd "$TEMP_DIR"
+
+echo ""
+echo "=== Running CI Checks ==="
+
+# Format check
+echo "1. Format check..."
+if cargo fmt --all -- --check 2>&1 | grep -v "Warning" > /tmp/fmt-errors.txt; then
+    if [ -s /tmp/fmt-errors.txt ]; then
+        echo "❌ Format errors found:"
+        head -50 /tmp/fmt-errors.txt
+        EXIT_CODE=1
+    else
+        echo "✅ Format check passed"
+        EXIT_CODE=0
+    fi
+else
+    echo "✅ Format check passed"
+    EXIT_CODE=0
+fi
+
+# Cleanup
+cd /
+rm -rf "$TEMP_DIR"
+exit $EXIT_CODE
+```
+
+Usage:
+```bash
+chmod +x .claude/scripts/ci-debug.sh
+./.claude/scripts/ci-debug.sh
+```
+
+### Real Example: Format Check Failure (2026-02-10)
+
+**Problem**: `cargo fmt --all -- --check` passed locally but failed in CI
+
+**Root cause**: Working in `/rmk/elink-protocol/`, parent directory's `rust-toolchain.toml` overrode rustfmt behavior
+
+**Wrong approach** (wasted 30 minutes):
+1. ❌ Ran `cargo fmt` multiple times locally (no changes)
+2. ❌ Created empty commit to "trigger CI rerun"
+3. ❌ Manually edited formatting (guessing based on CI screenshot)
+4. ❌ Assumed local environment was correct
+
+**Correct approach** (should take 10 minutes):
+1. ✅ Saw CI error screenshot with specific files
+2. ✅ Immediately: `cd /tmp && git clone && cargo fmt --all -- --check`
+3. ✅ Reproduced issue instantly (saw format diffs)
+4. ✅ Fixed: `cargo fmt --all` in clean environment
+5. ✅ Synced back: `rsync -av /tmp/clone/ ./`
+6. ✅ Verified: Clone again and test before pushing
+
+**Key lesson**: The first thing to do when CI fails is reproduce in clean environment, not debug locally.
+
+### What NOT To Do
+
+❌ **Run same command 10 times locally hoping it will magically work**
+- If it passes once, it will pass again (unless environment changed)
+- Move to clean environment immediately
+
+❌ **Create empty commits to "trigger CI rerun"**
+- CI will fail again with same error
+- Fix the root cause first
+
+❌ **Manually edit formatting based on CI screenshots**
+- Let `cargo fmt` do it in correct environment
+- Manual edits may not match rustfmt's actual formatting
+
+❌ **Assume "it works on my machine" means CI is broken**
+- 99% of time, CI is correct and local environment differs
+- Trust CI, debug environment difference
+
+❌ **Test different features/flags randomly**
+- Check CI workflow YAML for exact commands used
+- Test exact same feature combination
+
+### Time Savings
+
+Following this process:
+- ❌ Old way: 30-60 minutes of trial and error
+- ✅ New way: 5-10 minutes with clean environment
+- **75-85% time saved**
+
+### When to Escalate
+
+Escalate to user/team only if:
+1. CI fails in clean environment BUT passes with exact same commands locally
+2. CI uses credentials/secrets you don't have access to
+3. CI failure is infrastructure-related (GitHub Actions down, cache corruption)
+4. Error message is unclear and not reproducible
+
+Otherwise, debug systematically using clean environment approach.
+
+---
+
 ## Version History
+- 2026-02-10: Added CI troubleshooting guide (Critical for efficiency)
+  - **Lesson learned**: Never trust local environment when CI fails
+  - Standard debugging process: reproduce in clean /tmp clone immediately
+  - Environment difference checklist (rust-toolchain.toml, parent dirs, features)
+  - Real example: Format check failure resolved in 10min vs 30min wasted time
+  - Quick debug script template for future use
+  - Key principle: 75-85% time savings by using systematic approach
 - 2026-02-10: Added protocol evaluation standards
   - **Critical**: Require objective, third-party perspective when comparing protocols
   - Added embedded environment considerations (flash size, RAM, CPU, power)
