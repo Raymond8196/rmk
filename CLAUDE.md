@@ -652,6 +652,172 @@ Outdated protocol docs are worse than no docs - they create confusion and bugs.
 
 ---
 
+## Protocol Evaluation and Comparison Standards
+
+### Objective and Unbiased Evaluation
+
+**CRITICAL REQUIREMENT**: When comparing or evaluating communication protocols (Elink, RMK Serial, QMK Serial, etc.), you MUST maintain a third-party, objective perspective.
+
+#### ❌ Forbidden Approaches
+
+**Never show bias toward any protocol:**
+- Don't use subjective ratings (⭐⭐⭐⭐⭐ ratings)
+- Avoid value-laden terms like "superior", "better", "worse", "perfect", "excellent"
+- Don't make absolute judgments about which protocol is "best"
+- Avoid phrases like "X is clearly better than Y"
+
+**Bad examples:**
+```markdown
+❌ "Elink performs excellently in all scenarios"
+❌ "RMK Serial has weak error detection"
+❌ "QMK Serial is inferior due to lack of checksums"
+❌ Rating: Elink ⭐⭐⭐⭐⭐, RMK Serial ⭐⭐⭐, QMK Serial ⭐⭐
+```
+
+#### ✅ Required Approaches
+
+**1. Describe Technical Characteristics Objectively**
+
+State facts without judgment:
+```markdown
+✅ "Elink uses CRC16 for error detection (2-byte overhead)"
+✅ "RMK Serial relies on COBS encoding's inherent consistency checks"
+✅ "QMK Serial uses SYNC+LENGTH framing without explicit checksums"
+```
+
+**2. Present Design Trade-offs**
+
+Every protocol makes deliberate trade-offs. Present them neutrally:
+
+```markdown
+| Protocol | Design Choice | Benefit | Cost |
+|----------|--------------|---------|------|
+| Elink | Explicit CRC16 | Detects bit-level corruption | +2 bytes overhead |
+| RMK Serial | COBS encoding | Low overhead (~0.4%) | Implicit error detection only |
+| QMK Serial | Minimal framing | Smallest overhead (2 bytes) | No error detection mechanism |
+```
+
+**3. Specify Applicable Scenarios**
+
+Make clear each protocol is designed for specific use cases:
+
+```markdown
+**Design Context:**
+- Elink: Designed for wireless (BLE) split keyboards with multiple peripherals
+  - Wireless introduces higher error rates → CRC necessary
+  - Multi-device coordination → device addressing + priority system
+
+- RMK Serial: Designed for wired point-to-point split keyboards
+  - Wired connection more reliable → COBS sufficient
+  - Single peripheral → no device addressing needed
+
+- QMK Serial: Designed for simple, reliable wired connections
+  - Very short cable runs → minimal error risk
+  - Simplicity prioritized → minimal protocol overhead
+```
+
+**4. Present Test Results as Data Points**
+
+Test results reflect performance under specific conditions, not absolute quality:
+
+```markdown
+**Test Results (5% packet loss, simulated wireless)**
+
+| Protocol | Messages Received | Success Rate | Notes |
+|----------|------------------|--------------|-------|
+| Elink | 480/480 | 100% | CRC detected all corruption |
+| RMK Serial | 475/475 | 100% | COBS+Postcard caught errors |
+| QMK Serial | 468/470 | 99.6% | 2 frames failed validation |
+
+**Interpretation:**
+- All protocols performed well in this scenario
+- QMK Serial's 99.6% may be acceptable for its target use case (reliable wired)
+- Test does not reflect real-world wired conditions (lower error rates)
+```
+
+### Embedded Environment Considerations
+
+**CRITICAL**: Keyboard firmware runs on resource-constrained embedded systems. Always evaluate protocols considering:
+
+#### 1. Code Size / Flash Usage
+
+```markdown
+| Protocol | Library Size | Impact on Firmware |
+|----------|-------------|-------------------|
+| Elink | ~2-3 KB | Significant for 32KB devices |
+| RMK Serial | ~1 KB | Moderate overhead |
+| QMK Serial | ~500 bytes | Minimal footprint |
+
+**Consideration**: For keyboards with 32KB flash (nRF52832),
+every KB matters for features like RGB, macros, and Via support.
+```
+
+#### 2. RAM Usage
+
+```markdown
+| Protocol | Buffer Requirements | Peak Usage |
+|----------|-------------------|------------|
+| Elink | 512B RX + 64B TX | ~600 bytes |
+| RMK Serial | 512B buffer | ~512 bytes |
+| QMK Serial | 256B buffer | ~256 bytes |
+
+**Consideration**: Devices with 64KB RAM need careful memory budgeting.
+Larger buffers reduce available RAM for keymap, macros, and runtime state.
+```
+
+#### 3. CPU Overhead
+
+```markdown
+| Protocol | Per-Message Cost | Impact |
+|----------|-----------------|--------|
+| Elink | ~15µs encode + CRC | Negligible at 100 msg/s |
+| RMK Serial | ~10µs COBS | Minimal CPU usage |
+| QMK Serial | ~5µs minimal | Almost zero overhead |
+
+**Consideration**: MCUs run at 64MHz-240MHz. Even "expensive"
+protocols use <0.5% CPU at typical message rates (100-200 msg/s).
+Performance is rarely the bottleneck.
+```
+
+#### 4. Power Consumption
+
+```markdown
+**Wireless Keyboards (BLE)**:
+- Transmission time = dominant power factor
+- Smaller frames → less radio-on time → longer battery life
+- Elink: 10 bytes overhead, RMK: 2 bytes, QMK: 2 bytes
+- But: retransmissions from errors cost more than overhead
+
+**Consideration**: For BLE keyboards, reliability affects battery
+life more than frame size. One retransmission costs more energy
+than extra CRC bytes in original frame.
+```
+
+### Writing Protocol Comparisons
+
+When creating comparison documents:
+
+**Structure:**
+1. **Technical Overview**: Describe each protocol's mechanisms
+2. **Design Rationale**: Explain why each made its choices
+3. **Trade-off Analysis**: Show benefits and costs of each approach
+4. **Use Case Fit**: Describe scenarios where each excels
+5. **Test Data**: Present results with clear context
+6. **Resource Requirements**: Flash, RAM, CPU, power considerations
+
+**Tone:**
+- Analytical, not judgmental
+- Educational, not prescriptive
+- Comparative, not competitive
+
+**Remember:**
+- Protocol design reflects different priorities, not better/worse engineering
+- Each protocol serves its intended use case well
+- Resource constraints (flash/RAM/power) often matter more than performance
+- The "right" protocol depends entirely on the specific application requirements
+
+---
+
 ## Working with Uncertainty
 
 ### When to Ask for Clarification
@@ -693,6 +859,11 @@ Outdated protocol docs are worse than no docs - they create confusion and bugs.
 ---
 
 ## Version History
+- 2026-02-10: Added protocol evaluation standards
+  - **Critical**: Require objective, third-party perspective when comparing protocols
+  - Added embedded environment considerations (flash size, RAM, CPU, power)
+  - Defined forbidden biased language and required neutral approaches
+  - Emphasize resource constraints over pure performance metrics
 - 2026-02-09: Initial version, created based on Boris Cherny's 13 tips
   - Added language policy: All documentation/commits in English
   - Added protocol documentation maintenance rules (critical)
