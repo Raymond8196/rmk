@@ -51,6 +51,7 @@ const ROT_MAX: i8 = 127;
 
 // PMW3360/ 3389 registers are almost alike. This Enum contains a few extra registers that are not available for the 3360
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Eq, PartialEq, Debug)]
 enum Register {
     ProductId,
@@ -748,6 +749,7 @@ where
     /// Create a new PMW33xx device with SROM firmware and custom poll intervall and report rate
     ///
     /// Firmware is downloaded to the sensor on every startup
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_firmware_poll_interval_report_hertz(
         id: u8,
         spi: SPI,

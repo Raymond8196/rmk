@@ -17,6 +17,7 @@ use {
 /// * `id` - peripheral id
 /// * `addr` - (optional) peripheral's BLE static address. This argument is enabled only for nRF BLE split now
 /// * `receiver` - (optional) serial port. This argument is enabled only for serial split now
+#[allow(clippy::extra_unused_lifetimes)]
 pub async fn run_peripheral_manager<
     'a,
     const ROW: usize,

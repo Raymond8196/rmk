@@ -179,7 +179,7 @@ pub async fn initialize_encoder_keymap_and_storage<
 
     #[cfg(not(feature = "host"))]
     {
-        let storage = Storage::new(flash, storage_config, &behavior_config).await;
+        let storage = Storage::new(flash, storage_config, behavior_config).await;
         let keymap = RefCell::new(
             KeyMap::new(
                 default_keymap,
@@ -228,13 +228,14 @@ pub async fn initialize_keymap_and_storage<
 
     #[cfg(not(feature = "host"))]
     {
-        let storage = Storage::new(flash, storage_config, &behavior_config).await;
+        let storage = Storage::new(flash, storage_config, behavior_config).await;
         let keymap = RefCell::new(KeyMap::new(default_keymap, None, behavior_config, positional_config).await);
         (keymap, storage)
     }
 }
 
 #[allow(unreachable_code)]
+#[allow(clippy::extra_unused_lifetimes)]
 pub async fn run_rmk<
     'a,
     #[cfg(feature = "_ble")] 'b,
@@ -335,6 +336,7 @@ pub async fn run_rmk<
 //
 // Due to https://github.com/rust-lang/rust/issues/62958, storage/host struct is used now.
 // The corresponding future(commented) will be used after the issue is fixed.
+#[allow(clippy::extra_unused_lifetimes)]
 pub(crate) async fn run_keyboard<
     'a,
     R: HidReaderTrait<ReportType = LedIndicator>,

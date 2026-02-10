@@ -32,6 +32,7 @@ use crate::state::ConnectionState;
 /// * `stack` - (optional) The TrouBLE stack
 /// * `serial` - (optional) serial port used to send peripheral split message. This argument is enabled only for serial split now
 /// * `storage` - (optional) The storage to save the central address
+#[allow(clippy::extra_unused_lifetimes)]
 pub async fn run_rmk_split_peripheral<
     'a,
     #[cfg(feature = "_ble")] C: Controller + ControllerCmdAsync<LeSetPhy>,
@@ -86,7 +87,7 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
 
         loop {
             let read_message_to_send = async {
-                let message = crate::select_biased_with_feature! {
+                crate::select_biased_with_feature! {
                     e = key_sub.receive().fuse() => SplitMessage::Key(e),
                     with_feature("_ble"): e = charging_state_sub.receive().fuse() => {
                         if e.charging {
@@ -98,8 +99,7 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
                     e = touch_sub.receive().fuse() => SplitMessage::Touchpad(e),
                     e = pointing_sub.receive().fuse() => SplitMessage::Pointing(e),
                     with_feature("_ble"): e = battery_sub.next_event().fuse() => SplitMessage::BatteryState(e),
-                };
-                message
+                }
             };
 
             match select(self.split_driver.read(), read_message_to_send).await {
