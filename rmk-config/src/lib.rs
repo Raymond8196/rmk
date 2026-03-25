@@ -722,6 +722,8 @@ pub struct SplitConfig {
     pub connection: String,
     pub central: SplitBoardConfig,
     pub peripheral: Vec<SplitBoardConfig>,
+    /// Gazell-specific split configuration
+    pub gazell: Option<GazellSplitConfig>,
 }
 
 /// Configurations for each split board
@@ -754,6 +756,17 @@ pub struct SplitBoardConfig {
     pub adc_divider_total: Option<u32>,
     /// Output Pin config for the split
     pub output: Option<Vec<OutputConfig>>,
+    /// Gazell pipe index for this peripheral (defaults to peripheral index)
+    pub gazell_pipe: Option<u8>,
+}
+
+/// Gazell-specific split configuration
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct GazellSplitConfig {
+    /// RF channel (0-125)
+    pub channel: Option<u8>,
+    /// Heartbeat interval in milliseconds
+    pub heartbeat_interval_ms: Option<u16>,
 }
 
 /// Serial port config

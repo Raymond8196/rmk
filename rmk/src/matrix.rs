@@ -549,3 +549,21 @@ impl<const ROW: usize, const COL: usize> MatrixTrait<ROW, COL> for TestMatrix<RO
     #[cfg(feature = "async_matrix")]
     async fn wait_for_key(&mut self) {}
 }
+
+/// A dummy matrix for zero-key devices (e.g., Gazell USB dongle).
+/// Produces no key events and sleeps forever.
+#[input_device(publish = KeyboardEvent)]
+pub struct DummyMatrix;
+
+impl DummyMatrix {
+    pub fn new() -> Self {
+        Self
+    }
+
+    async fn read_keyboard_event(&mut self) -> KeyboardEvent {
+        // Never produces events — sleep forever
+        loop {
+            embassy_time::Timer::after_secs(86400).await;
+        }
+    }
+}

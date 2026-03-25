@@ -34,6 +34,10 @@ pub(crate) trait SplitWriter {
     async fn write(&mut self, message: &SplitMessage) -> Result<usize, SplitDriverError>;
 }
 
+/// Maximum payload size for Gazell protocol (Nordic nRF5 SDK)
+#[cfg(feature = "wireless_gazell")]
+pub const GAZELL_MAX_PAYLOAD: usize = 32;
+
 /// PeripheralManager runs in central.
 /// It reads split message from peripheral and updates key matrix cache of the peripheral.
 ///

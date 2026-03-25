@@ -48,6 +48,9 @@ postcard = { version = "1", features = ["experimental-derive"] }
 paste = "1"
 
 # Optional dependencies
+# 2.4G Wireless dependencies
+rmk-gazell-sys = { path = "../rmk-gazell-sys", optional = true }
+
 # BLE dependencies
 trouble-host = { git = "https://github.com/haobogu/trouble", rev = "e96bdadda8806b1f6257978549746a516f73cf3d", features = [
     "gatt",
@@ -210,6 +213,18 @@ passkey_entry = ["_ble", "rmk-types/passkey_entry"]
 
 ## Enable feature if you want to use trouble BLE stack
 _ble = ["dep:trouble-host", "dep:rand_core", "dep:bt-hci", "storage", "rmk-types/_ble"]
+
+#! ### 2.4G Wireless feature flags
+#!
+#! These features enable Nordic Gazell protocol support for 2.4GHz wireless keyboards.
+## Enable Gazell 2.4G wireless support
+wireless_gazell = ["dep:rmk-gazell-sys"]
+## Enable Gazell support for nRF52840
+wireless_gazell_nrf52840 = ["wireless_gazell", "rmk-gazell-sys/nrf52840", "split", "dep:embassy-nrf"]
+## Enable Gazell support for nRF52833
+wireless_gazell_nrf52833 = ["wireless_gazell", "rmk-gazell-sys/nrf52833", "split", "dep:embassy-nrf"]
+## Enable Gazell support for nRF52832
+wireless_gazell_nrf52832 = ["wireless_gazell", "rmk-gazell-sys/nrf52832", "split", "dep:embassy-nrf"]
 
 [lib]
 # Don't run doctest for lib

@@ -1,7 +1,9 @@
+#[cfg(feature = "wireless_gazell")]
+use crate::wireless::config::GazellConfig;
 #[cfg(feature = "_ble")]
 use bt_hci::{cmd::le::LeSetPhy, controller::ControllerCmdAsync};
 use embassy_futures::select::{Either, select};
-#[cfg(not(feature = "_ble"))]
+#[cfg(not(any(feature = "_ble", feature = "wireless_gazell")))]
 use embedded_io_async::{Read, Write};
 use futures::FutureExt;
 #[cfg(all(feature = "_ble", feature = "storage"))]
@@ -20,7 +22,7 @@ use crate::CONNECTION_STATE;
 use crate::event::{
     KeyboardEvent, LayerChangeEvent, LedIndicatorEvent, PointingEvent, SubscribableEvent, publish_event,
 };
-#[cfg(not(feature = "_ble"))]
+#[cfg(not(any(feature = "_ble", feature = "wireless_gazell")))]
 use crate::split::serial::SerialSplitDriver;
 use crate::state::ConnectionState;
 
@@ -32,31 +34,38 @@ use crate::state::ConnectionState;
 /// * `stack` - (optional) The TrouBLE stack
 /// * `serial` - (optional) serial port used to send peripheral split message. This argument is enabled only for serial split now
 /// * `storage` - (optional) The storage to save the central address
-pub async fn run_rmk_split_peripheral<
+/// Run the split peripheral service over BLE.
+#[cfg(feature = "_ble")]
+pub async fn run_rmk_split_peripheral_ble<
     'a,
-    #[cfg(feature = "_ble")] C: Controller + ControllerCmdAsync<LeSetPhy>,
-    #[cfg(not(feature = "_ble"))] S: Write + Read,
-    #[cfg(feature = "_ble")] F: NorFlash,
-    #[cfg(feature = "_ble")] const ROW: usize,
-    #[cfg(feature = "_ble")] const COL: usize,
-    #[cfg(feature = "_ble")] const NUM_LAYER: usize,
-    #[cfg(feature = "_ble")] const NUM_ENCODER: usize,
+    C: Controller + ControllerCmdAsync<LeSetPhy>,
+    F: NorFlash,
+    const ROW: usize,
+    const COL: usize,
+    const NUM_LAYER: usize,
+    const NUM_ENCODER: usize,
 >(
-    #[cfg(feature = "_ble")] id: usize,
-    #[cfg(feature = "_ble")] stack: &'a Stack<'a, C, DefaultPacketPool>,
-    #[cfg(feature = "_ble")] storage: &mut Storage<F, ROW, COL, NUM_LAYER, NUM_ENCODER>,
-    #[cfg(not(feature = "_ble"))] serial: S,
+    id: usize,
+    stack: &'a Stack<'a, C, DefaultPacketPool>,
+    storage: &mut Storage<F, ROW, COL, NUM_LAYER, NUM_ENCODER>,
 ) {
-    #[cfg(not(feature = "_ble"))]
-    {
-        let mut peripheral = SplitPeripheral::new(SerialSplitDriver::new(serial));
-        loop {
-            peripheral.run().await;
-        }
-    }
+    crate::split::ble::peripheral::initialize_nrf_ble_split_peripheral_and_run(id, stack, storage)
+        .await;
+}
 
-    #[cfg(feature = "_ble")]
-    crate::split::ble::peripheral::initialize_nrf_ble_split_peripheral_and_run(id, stack, storage).await;
+/// Run the split peripheral service over Gazell 2.4GHz.
+#[cfg(feature = "wireless_gazell")]
+pub async fn run_rmk_split_peripheral_gazell(gazell_config: GazellConfig) {
+    crate::split::gazell::run_gazell_split_peripheral(gazell_config).await;
+}
+
+/// Run the split peripheral service over serial.
+#[cfg(not(any(feature = "_ble", feature = "wireless_gazell")))]
+pub async fn run_rmk_split_peripheral_serial<S: Write + Read>(serial: S) {
+    let mut peripheral = SplitPeripheral::new(SerialSplitDriver::new(serial));
+    loop {
+        peripheral.run().await;
+    }
 }
 
 /// The split peripheral instance.

@@ -1,3 +1,4 @@
+use crate::BoardConfig;
 use crate::chip::{ChipModel, ChipSeries};
 use crate::usb_interrupt_map::get_usb_info;
 use crate::{BleConfig, KeyboardTomlConfig};
@@ -75,6 +76,20 @@ impl CommunicationConfig {
 
 impl KeyboardTomlConfig {
     pub(crate) fn get_communication_config(&self) -> Result<CommunicationConfig, String> {
+        // Gazell split: suppress BLE (shared radio), return USB or None
+        if let Ok(BoardConfig::Split(ref split_config)) = self.get_board_config() {
+            if split_config.connection == "gazell" {
+                let usb_enabled = self.keyboard.clone().unwrap_or_default().usb_enable.unwrap_or(false);
+                if usb_enabled {
+                    let chip = self.get_chip_model().unwrap();
+                    if let Some(usb_info) = get_usb_info(&chip.chip) {
+                        return Ok(CommunicationConfig::Usb(usb_info));
+                    }
+                }
+                return Ok(CommunicationConfig::None);
+            }
+        }
+
         let usb_enabled = self.keyboard.clone().unwrap_or_default().usb_enable.unwrap_or(false);
         let chip = self.get_chip_model().unwrap();
         let usb_info = if usb_enabled { get_usb_info(&chip.chip) } else { None };

@@ -1,7 +1,7 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "_ble")]
+#[cfg(any(feature = "_ble", feature = "wireless_gazell"))]
 use crate::event::BatteryStateEvent;
 use crate::event::{KeyboardEvent, PointingEvent};
 
@@ -10,10 +10,12 @@ pub mod ble;
 pub mod central;
 /// Common abstraction layer of split driver
 pub(crate) mod driver;
+#[cfg(feature = "wireless_gazell")]
+pub mod gazell;
 pub mod peripheral;
 #[cfg(feature = "rp2040")]
 pub mod rp;
-#[cfg(not(feature = "_ble"))]
+#[cfg(not(any(feature = "_ble", feature = "wireless_gazell")))]
 pub mod serial;
 
 /// Maximum size of a split message
@@ -42,6 +44,6 @@ pub(crate) enum SplitMessage {
     /// Layer number from central to peripheral
     Layer(u8),
     /// Battery state, from peripheral to central
-    #[cfg(feature = "_ble")]
+    #[cfg(any(feature = "_ble", feature = "wireless_gazell"))]
     BatteryState(BatteryStateEvent),
 }
