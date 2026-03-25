@@ -1,0 +1,79 @@
+[package]
+name = "rmk-nrf52840-gazell-split"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rmk = { path = "../../../rmk", default-features = false, features = [
+    "wireless_gazell_nrf52840",
+    "split",
+    "defmt",
+    "col2row",
+    "vial",
+    "storage",
+] }
+rmk-gazell-sys = { path = "../../../rmk-gazell-sys", features = ["nrf52840"] }
+
+# Embassy async runtime
+embassy-executor = { version = "0.9", features = [
+    "defmt",
+    "arch-cortex-m",
+    "executor-thread",
+] }
+embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
+embassy-nrf = { version = "0.8", features = [
+    "defmt",
+    "nrf52840",
+    "time-driver-rtc1",
+    "gpiote",
+    "unstable-pac",
+    "nfc-pins-as-gpio",
+    "time",
+] }
+
+# Cortex-M
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.5"
+
+# Logging
+defmt = "1.0"
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+
+# Serialization (for SplitMessage)
+postcard = "1"
+
+# Utils
+static_cell = "2"
+
+[build-dependencies]
+xz2 = "0.1.7"
+json = "0.12"
+const-gen = "1.6"
+
+[[bin]]
+name = "central"
+path = "src/central.rs"
+
+[[bin]]
+name = "peripheral"
+path = "src/peripheral.rs"
+
+[[bin]]
+name = "peripheral_right"
+path = "src/peripheral_right.rs"
+
+[profile.dev]
+codegen-units = 1
+debug = true
+opt-level = 1
+overflow-checks = true
+lto = false
+panic = 'abort'
+
+[profile.release]
+codegen-units = 1
+debug = true
+opt-level = "z"
+overflow-checks = false
+lto = "fat"
