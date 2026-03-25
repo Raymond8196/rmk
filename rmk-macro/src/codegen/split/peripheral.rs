@@ -76,6 +76,39 @@ fn expand_bind_interrupt_for_split_peripheral(
     hardware: &Hardware,
     peripheral_id: usize,
 ) -> TokenStream2 {
+    // Gazell: generate ISR bridges for RADIO/TIMER2/EGU0_SWI0 instead of BLE bindings
+    if let BoardConfig::Split(split_config) = &hardware.board {
+        if split_config.connection == "gazell" {
+            if chip.series == ChipSeries::Nrf52 {
+                return quote! {
+                    use ::embassy_nrf::pac::interrupt;
+
+                    unsafe extern "C" {
+                        fn RADIO_IRQHandler();
+                        fn TIMER2_IRQHandler();
+                        fn SWI0_EGU0_IRQHandler();
+                    }
+
+                    #[::embassy_nrf::pac::interrupt]
+                    fn RADIO() {
+                        unsafe { RADIO_IRQHandler() }
+                    }
+
+                    #[::embassy_nrf::pac::interrupt]
+                    fn TIMER2() {
+                        unsafe { TIMER2_IRQHandler() }
+                    }
+
+                    #[::embassy_nrf::pac::interrupt]
+                    fn EGU0_SWI0() {
+                        unsafe { SWI0_EGU0_IRQHandler() }
+                    }
+                };
+            }
+            return quote! {};
+        }
+    }
+
     let communication = &hardware.communication;
     match chip.series {
         ChipSeries::Nrf52 => {
@@ -383,7 +416,7 @@ fn expand_split_peripheral_entry(
 
     if split_config.connection == "ble" {
         let peripheral_run = quote! {
-            ::rmk::split::peripheral::run_rmk_split_peripheral(
+            ::rmk::split::peripheral::run_rmk_split_peripheral_ble(
                 #id,
                 &stack,
                 &mut storage,
@@ -422,13 +455,68 @@ fn expand_split_peripheral_entry(
                 .to_lowercase()
         );
         let peripheral_run = quote! {
-            ::rmk::split::peripheral::run_rmk_split_peripheral(#uart_instance)
+            ::rmk::split::peripheral::run_rmk_split_peripheral_serial(#uart_instance)
         };
         let mut tasks = vec![device_task, peripheral_run];
         tasks.extend(registered_processors);
         let run_rmk_peripheral = join_all_tasks(tasks);
         quote! {
             #serial_init
+            #run_rmk_peripheral
+        }
+    } else if split_config.connection == "gazell" {
+        let pipe = split_config.peripheral[id].gazell_pipe.unwrap_or(id as u8);
+        // HFCLK must be started before Gazell init on boards without USB
+        let hfclk_init = if chip.series == ChipSeries::Nrf52 {
+            quote! {
+                {
+                    let clock = ::embassy_nrf::pac::CLOCK;
+                    clock.tasks_hfclkstart().write_value(1);
+                    while clock.events_hfclkstarted().read() != 1 {}
+                    ::defmt::info!("HFCLK started");
+                }
+            }
+        } else {
+            quote! {}
+        };
+        // Set Gazell interrupt priorities before init
+        let irq_priority_init = if chip.series == ChipSeries::Nrf52 {
+            quote! {
+                ::embassy_nrf::interrupt::RADIO.set_priority(::embassy_nrf::interrupt::Priority::P0);
+                ::embassy_nrf::interrupt::TIMER2.set_priority(::embassy_nrf::interrupt::Priority::P0);
+                ::embassy_nrf::interrupt::EGU0_SWI0.set_priority(::embassy_nrf::interrupt::Priority::P1);
+            }
+        } else {
+            quote! {}
+        };
+        // Initialize Gazell BEFORE join — must not be inside a joined task
+        let gazell_init = quote! {
+            {
+                let ret = unsafe { ::rmk_gazell_sys::gz_init_default(0) };
+                if ret != 0 {
+                    ::defmt::error!("gz_init_default failed: {}", ret);
+                    loop { ::embassy_time::Timer::after_millis(1000).await; }
+                }
+            }
+        };
+        let peripheral_run = quote! {
+            ::rmk::split::peripheral::run_rmk_split_peripheral_gazell(
+                ::rmk::wireless::config::GazellConfig {
+                    pipe: #pipe,
+                    ..::rmk::wireless::config::GazellConfig::default()
+                },
+            )
+        };
+        let mut tasks = vec![device_task, peripheral_run];
+        if !processors.is_empty() {
+            tasks.push(processor_task);
+        }
+        tasks.extend(registered_processors);
+        let run_rmk_peripheral = join_all_tasks(tasks);
+        quote! {
+            #irq_priority_init
+            #hfclk_init
+            #gazell_init
             #run_rmk_peripheral
         }
     } else {

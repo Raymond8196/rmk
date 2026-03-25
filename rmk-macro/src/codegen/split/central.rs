@@ -34,6 +34,35 @@ fn expand_split_communication_config(chip: &ChipModel, split_config: &SplitConfi
                 .expect("central.serial is required");
             expand_serial_init(chip, serial_config)
         }
+        "gazell" => {
+            // Gazell central: init HFCLK, IRQ priorities, and Gazell host mode
+            let hfclk_and_irq = if chip.series == ChipSeries::Nrf52 {
+                quote! {
+                    // Start HFCLK (USB auto-starts it, but ensure it's running for Gazell)
+                    {
+                        let clock = ::embassy_nrf::pac::CLOCK;
+                        clock.tasks_hfclkstart().write_value(1);
+                        while clock.events_hfclkstarted().read() != 1 {}
+                        ::defmt::info!("HFCLK started for Gazell central");
+                    }
+                    // Set Gazell interrupt priorities
+                    ::embassy_nrf::interrupt::RADIO.set_priority(::embassy_nrf::interrupt::Priority::P0);
+                    ::embassy_nrf::interrupt::TIMER2.set_priority(::embassy_nrf::interrupt::Priority::P0);
+                    ::embassy_nrf::interrupt::EGU0_SWI0.set_priority(::embassy_nrf::interrupt::Priority::P1);
+                    // Initialize Gazell host mode
+                    {
+                        let ret = unsafe { ::rmk_gazell_sys::gz_init_default(1) };
+                        if ret != 0 {
+                            ::defmt::error!("gz_init_default(host) failed: {}", ret);
+                            loop { ::embassy_time::Timer::after_millis(1000).await; }
+                        }
+                    }
+                }
+            } else {
+                quote! {}
+            };
+            hfclk_and_irq
+        }
         _ => panic!("Invalid connection type for split"),
     }
 }

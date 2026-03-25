@@ -113,7 +113,7 @@ pub(crate) fn rmk_entry_select(
                     let row_offset = p.row_offset;
                     let col_offset = p.col_offset;
                     tasks.push(quote! {
-                        ::rmk::split::central::run_peripheral_manager::<#row, #col, #row_offset, #col_offset, _>(
+                        ::rmk::split::central::run_peripheral_manager_ble::<#row, #col, #row_offset, #col_offset, _>(
                             #idx,
                             &peripheral_addrs,
                             &stack,
@@ -152,16 +152,49 @@ pub(crate) fn rmk_entry_select(
                             .to_lowercase()
                     );
                     tasks.push(quote! {
-                        ::rmk::split::central::run_peripheral_manager::<#row, #col, #row_offset, #col_offset, _>(
+                        ::rmk::split::central::run_peripheral_manager_serial::<#row, #col, #row_offset, #col_offset, _>(
                             #idx,
                             #uart_instance,
                         )
                     });
                 });
                 join_all_tasks(tasks)
+            } else if split_config.connection == "gazell" {
+                let rmk_task = quote! {
+                    ::rmk::run_rmk(#keymap #usb_driver_arg #storage rmk_config),
+                };
+                tasks.push(rmk_task);
+                if !processors.is_empty() {
+                    tasks.push(processors_task);
+                };
+
+                // Spawn the central hub task (single gz_recv owner)
+                let num_pipes = split_config.peripheral.len();
+                tasks.push(quote! {
+                    ::rmk::split::gazell::run_gazell_central_hub(
+                        ::rmk::wireless::config::GazellConfig::default(),
+                        #num_pipes,
+                    )
+                });
+
+                // Spawn per-peripheral pipe managers
+                split_config.peripheral.iter().enumerate().for_each(|(idx, p)| {
+                    let row = p.rows;
+                    let col = p.cols;
+                    let row_offset = p.row_offset;
+                    let col_offset = p.col_offset;
+                    let pipe = p.gazell_pipe.unwrap_or(idx as u8) as usize;
+                    tasks.push(quote! {
+                        ::rmk::split::gazell::run_gazell_pipe_manager::<#row, #col, #row_offset, #col_offset>(
+                            #idx,
+                            #pipe,
+                        )
+                    });
+                });
+                join_all_tasks(tasks)
             } else {
                 panic!(
-                    "Invalid split connection type: {}, only \"ble\" and \"serial\" are supported",
+                    "Invalid split connection type: {}, only \"ble\", \"serial\" and \"gazell\" are supported",
                     split_config.connection
                 );
             }
