@@ -4,7 +4,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use rmk_config::resolved::Hardware;
-use rmk_config::resolved::hardware::ChipSeries;
+use rmk_config::resolved::hardware::{ChipSeries, CommunicationConfig};
 
 pub(crate) fn expand_flash_init(hardware: &Hardware) -> TokenStream2 {
     if hardware.storage.is_none() {
@@ -35,8 +35,18 @@ pub(crate) fn expand_flash_init(hardware: &Hardware) -> TokenStream2 {
                 }
             }
             ChipSeries::Nrf52 => {
-                quote! {
-                    let flash = ::nrf_mpsl::Flash::take(mpsl, p.NVMC);
+                // When BLE is active, MPSL owns flash access; otherwise use NVMC directly
+                match &hardware.communication {
+                    CommunicationConfig::Ble(_) | CommunicationConfig::Both(_, _) => {
+                        quote! {
+                            let flash = ::nrf_mpsl::Flash::take(mpsl, p.NVMC);
+                        }
+                    }
+                    _ => {
+                        quote! {
+                            let flash = ::rmk::storage::async_flash_wrapper(::embassy_nrf::nvmc::Nvmc::new(p.NVMC));
+                        }
+                    }
                 }
             }
             ChipSeries::Rp2040 => {

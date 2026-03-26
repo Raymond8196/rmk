@@ -50,21 +50,26 @@ pub(crate) fn expand_matrix_config(
             }
         },
         BoardConfig::Split(split_config) => {
-            // Matrix config for split central
-            match split_config.central.matrix.matrix_type {
-                MatrixType::Normal => matrix_config.extend(expand_matrix_input_output_pins(
-                    &hardware.chip,
-                    split_config.central.matrix.row_pins.clone().unwrap(),
-                    split_config.central.matrix.col_pins.clone().unwrap(),
-                    split_config.central.matrix.row2col,
-                    async_matrix,
-                )),
-                MatrixType::DirectPin => matrix_config.extend(expand_matrix_direct_pins(
-                    &hardware.chip,
-                    split_config.central.matrix.direct_pins.clone().unwrap(),
-                    async_matrix,
-                    split_config.central.matrix.direct_pin_low_active,
-                )),
+            // Zero-matrix central (e.g. Gazell dongle with no keys): skip pin init
+            if split_config.central.rows == 0 && split_config.central.cols == 0 {
+                // No pins to initialize — DummyMatrix is used in orchestrator
+            } else {
+                // Matrix config for split central
+                match split_config.central.matrix.matrix_type {
+                    MatrixType::Normal => matrix_config.extend(expand_matrix_input_output_pins(
+                        &hardware.chip,
+                        split_config.central.matrix.row_pins.clone().unwrap(),
+                        split_config.central.matrix.col_pins.clone().unwrap(),
+                        split_config.central.matrix.row2col,
+                        async_matrix,
+                    )),
+                    MatrixType::DirectPin => matrix_config.extend(expand_matrix_direct_pins(
+                        &hardware.chip,
+                        split_config.central.matrix.direct_pins.clone().unwrap(),
+                        async_matrix,
+                        split_config.central.matrix.direct_pin_low_active,
+                    )),
+                }
             }
         }
     };

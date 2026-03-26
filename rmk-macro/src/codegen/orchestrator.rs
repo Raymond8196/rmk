@@ -419,27 +419,34 @@ pub(crate) fn expand_matrix_and_keyboard_init(hardware: &Hardware) -> TokenStrea
             }
         },
         BoardConfig::Split(split_config) => {
-            // Matrix config for split central
-            let central_row = split_config.central.rows;
-            let central_row_offset = split_config.central.row_offset;
-            let central_col = split_config.central.cols;
-            let central_col_offset = split_config.central.col_offset;
-            let col2row = !split_config.central.matrix.row2col;
-            match split_config.central.matrix.matrix_type {
-                MatrixType::Normal => {
-                    let debouncer_type = get_debouncer_type(&split_config.central.matrix);
-                    quote! {
-                        let debouncer = #debouncer_type::new();
-                        let mut matrix = ::rmk::matrix::Matrix::<_, _, _, #central_row, #central_col, #col2row, #central_row_offset, #central_col_offset>::new(row_pins, col_pins, debouncer);
-                    }
+            // Zero-matrix central (e.g. Gazell dongle with no keys): use DummyMatrix
+            if split_config.central.rows == 0 && split_config.central.cols == 0 {
+                quote! {
+                    let mut matrix = ::rmk::matrix::DummyMatrix::new();
                 }
-                MatrixType::DirectPin => {
-                    let low_active = split_config.central.matrix.direct_pin_low_active;
-                    let size = split_config.central.rows * split_config.central.cols;
-                    let debouncer_type = get_debouncer_type(&split_config.central.matrix);
-                    quote! {
-                        let debouncer = #debouncer_type::new();
-                        let mut matrix = ::rmk::direct_pin::DirectPinMatrix::<_, _, #central_row, #central_col, #size, #central_row_offset, #central_col_offset>::new(direct_pins, debouncer, #low_active);
+            } else {
+                // Matrix config for split central
+                let central_row = split_config.central.rows;
+                let central_row_offset = split_config.central.row_offset;
+                let central_col = split_config.central.cols;
+                let central_col_offset = split_config.central.col_offset;
+                let col2row = !split_config.central.matrix.row2col;
+                match split_config.central.matrix.matrix_type {
+                    MatrixType::Normal => {
+                        let debouncer_type = get_debouncer_type(&split_config.central.matrix);
+                        quote! {
+                            let debouncer = #debouncer_type::new();
+                            let mut matrix = ::rmk::matrix::Matrix::<_, _, _, #central_row, #central_col, #col2row, #central_row_offset, #central_col_offset>::new(row_pins, col_pins, debouncer);
+                        }
+                    }
+                    MatrixType::DirectPin => {
+                        let low_active = split_config.central.matrix.direct_pin_low_active;
+                        let size = split_config.central.rows * split_config.central.cols;
+                        let debouncer_type = get_debouncer_type(&split_config.central.matrix);
+                        quote! {
+                            let debouncer = #debouncer_type::new();
+                            let mut matrix = ::rmk::direct_pin::DirectPinMatrix::<_, _, #central_row, #central_col, #size, #central_row_offset, #central_col_offset>::new(direct_pins, debouncer, #low_active);
+                        }
                     }
                 }
             }
