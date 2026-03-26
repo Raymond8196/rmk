@@ -1,6 +1,6 @@
 # Rebase Plan: Port Gazell to Upstream Main
 
-> **Status**: Completed (compile-verified, pending hardware validation)
+> **Status**: Completed (ARM build verified, pending hardware flash + validation)
 > **Created**: 2026-03-25
 > **Branch**: `feat/gazell-rebase` (from `upstream/main`)
 > **Old Branch**: `feat/ble-gazell-switch` (38 commits, preserved as reference)
@@ -169,3 +169,4 @@ cargo test --workspace   # Upstream tests must not regress
 |------|--------|
 | 2026-03-25 | Initial plan created |
 | 2026-03-26 | All 6 steps completed. 5 commits on `feat/gazell-rebase`. Compile-verified: rmk-macro ✅, rmk+gazell ✅, rmk+ble ✅, rmk+ble+gazell ✅, 110 tests pass ✅. Fixed BoardConfig import path and GazellSplitConfig serde consistency. Pending: dongle ARM build + hardware validation. |
+| 2026-03-26 | Fixed zero-matrix codegen panic for Gazell dongle (rows=0, cols=0). Three fixes: matrix.rs skip pin init, orchestrator.rs use DummyMatrix, flash.rs use Nvmc instead of nrf_mpsl::Flash when no BLE. All 3 ARM binaries build: central 148KB, peripheral 35KB, peripheral_right 44KB. 110 tests pass. Ready for hardware flash + verification. |
