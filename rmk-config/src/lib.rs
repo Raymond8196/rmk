@@ -762,6 +762,7 @@ pub struct SplitBoardConfig {
 
 /// Gazell-specific split configuration
 #[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GazellSplitConfig {
     /// RF channel (0-125)
     pub channel: Option<u8>,
