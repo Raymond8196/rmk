@@ -1,4 +1,4 @@
-use crate::BoardConfig;
+use crate::board::BoardConfig;
 use crate::chip::{ChipModel, ChipSeries};
 use crate::usb_interrupt_map::get_usb_info;
 use crate::{BleConfig, KeyboardTomlConfig};
