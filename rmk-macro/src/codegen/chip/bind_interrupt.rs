@@ -103,6 +103,52 @@ pub(crate) fn bind_interrupt_default(hardware: &Hardware, item_mod: &ItemMod) ->
             }
         }
         rmk_config::resolved::hardware::ChipSeries::Nrf52 => {
+            // Gazell central: generate ISR bridges instead of BLE/MPSL bindings
+            if let BoardConfig::Split(split_config) = board {
+                if split_config.connection == "gazell" {
+                    let usb_interrupt = if let Some(usb_info) = communication.get_usb_info() {
+                        let interrupt_name = format_ident!("{}", usb_info.interrupt_name);
+                        let peripheral_name = format_ident!("{}", usb_info.peripheral_name);
+                        quote! {
+                            use ::embassy_nrf::bind_interrupts;
+                            bind_interrupts!(struct Irqs {
+                                #interrupt_name => ::embassy_nrf::usb::InterruptHandler<::embassy_nrf::peripherals::#peripheral_name>;
+                                CLOCK_POWER => ::embassy_nrf::usb::vbus_detect::InterruptHandler;
+                            });
+                        }
+                    } else {
+                        quote! {}
+                    };
+                    return quote! {
+                        use ::embassy_nrf::pac::interrupt;
+
+                        unsafe extern "C" {
+                            fn RADIO_IRQHandler();
+                            fn TIMER2_IRQHandler();
+                            fn SWI0_EGU0_IRQHandler();
+                        }
+
+                        #[::embassy_nrf::pac::interrupt]
+                        fn RADIO() {
+                            unsafe { RADIO_IRQHandler() }
+                        }
+
+                        #[::embassy_nrf::pac::interrupt]
+                        fn TIMER2() {
+                            unsafe { TIMER2_IRQHandler() }
+                        }
+
+                        #[::embassy_nrf::pac::interrupt]
+                        fn EGU0_SWI0() {
+                            unsafe { SWI0_EGU0_IRQHandler() }
+                        }
+
+                        #usb_interrupt
+                        #extern_irqs
+                    };
+                }
+            }
+
             // Usb and clock interrupt
             let usb_and_clock_interrupt = if let Some(usb_info) = communication.get_usb_info() {
                 let interrupt_name = format_ident!("{}", usb_info.interrupt_name);

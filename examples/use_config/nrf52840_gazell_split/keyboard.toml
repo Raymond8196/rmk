@@ -37,6 +37,8 @@ rows = 0
 cols = 0
 row_offset = 0
 col_offset = 0
+[split.central.matrix]
+matrix_type = "normal"
 
 # Left hand (pipe 0)
 [[split.peripheral]]

@@ -21,7 +21,7 @@ embassy-executor = { version = "0.9", features = [
     "executor-thread",
 ] }
 embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
-embassy-nrf = { version = "0.8", features = [
+embassy-nrf = { version = "0.9", features = [
     "defmt",
     "nrf52840",
     "time-driver-rtc1",
