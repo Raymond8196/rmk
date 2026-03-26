@@ -657,3 +657,10 @@ When CI fails but local checks pass, the environment differs. Common issues:
   - Storage gate analysis: `storage + _ble` gate is BLE-only (PeerAddress), Gazell Vial already works
   - `compile_error!` analysis: cannot simply remove — `peripheral.rs` / `central.rs` use `#[cfg]` on individual generic params, requires enum dispatch refactor
   - Branch renamed to `feat/ble-gazell-switch`
+- 2026-03-26: Rebase onto upstream/main (134 commits ahead)
+  - Created `feat/gazell-rebase` from `upstream/main`, manually ported all Gazell code
+  - Old branch `feat/ble-gazell-switch` preserved as reference
+  - Adapted to upstream refactors: rmk-macro rewrite, rmk-config resolved layer, event system merge
+  - Re-implemented codegen on new macro architecture (entry.rs, split/central.rs, split/peripheral.rs, bind_interrupt.rs)
+  - Split peripheral/central entry functions (`_ble`, `_gazell`, `_serial`) for BLE+Gazell coexistence
+  - Compile-verified: all feature combinations pass, 110 unit tests pass
