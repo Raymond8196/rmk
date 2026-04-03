@@ -104,12 +104,12 @@ pub mod processor;
 #[cfg(feature = "split")]
 pub mod split;
 pub mod state;
-#[cfg(feature = "wireless_gazell")]
-pub mod wireless;
 #[cfg(feature = "storage")]
 pub mod storage;
 #[cfg(not(feature = "_no_usb"))]
 pub mod usb;
+#[cfg(feature = "wireless_gazell")]
+pub mod wireless;
 
 pub async fn initialize_keymap<
     'a,

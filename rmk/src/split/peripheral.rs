@@ -49,8 +49,7 @@ pub async fn run_rmk_split_peripheral_ble<
     stack: &'a Stack<'a, C, DefaultPacketPool>,
     storage: &mut Storage<F, ROW, COL, NUM_LAYER, NUM_ENCODER>,
 ) {
-    crate::split::ble::peripheral::initialize_nrf_ble_split_peripheral_and_run(id, stack, storage)
-        .await;
+    crate::split::ble::peripheral::initialize_nrf_ble_split_peripheral_and_run(id, stack, storage).await;
 }
 
 /// Run the split peripheral service over Gazell 2.4GHz.

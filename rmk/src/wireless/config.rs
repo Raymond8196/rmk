@@ -178,6 +178,13 @@ impl WirelessConfig for GazellConfig {
             && self.ack_timeout_us >= 250
             && self.ack_timeout_us <= 4000
             && self.pipe <= 7
+            // Idle heartbeat should be >= active heartbeat (slower saves power)
+            && (self.idle_heartbeat_interval_ms == 0
+                || self.idle_heartbeat_interval_ms >= self.heartbeat_interval_ms)
+            // Deep idle timeout should be > idle timeout (radio shutdown happens after idle)
+            && (self.deep_idle_timeout_secs == 0
+                || self.idle_timeout_ms == 0
+                || (self.deep_idle_timeout_secs as u64) * 1000 > self.idle_timeout_ms as u64)
     }
 
     fn description(&self) -> &'static str {

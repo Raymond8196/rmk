@@ -218,8 +218,7 @@ impl SplitReader for GazellPeripheralDriver {
             }
 
             // 3. Skip heartbeat during startup grace period
-            let in_grace_period =
-                self.startup_time.elapsed().as_millis() < self.startup_grace_ms as u64;
+            let in_grace_period = self.startup_time.elapsed().as_millis() < self.startup_grace_ms as u64;
 
             // 4. Check idle transition
             if !self.idle
@@ -423,9 +422,9 @@ impl SplitReader for PipeDriver {
     async fn read(&mut self) -> Result<SplitMessage, SplitDriverError> {
         // Once poisoned, always return Disconnected (prevents infinite retry)
         if self.poisoned {
-            // Yield to prevent busy-spin in callers that retry on error
-            core::future::pending::<()>().await;
-            unreachable!()
+            // Block forever — prevents busy-spin in callers that retry on error.
+            // `pending()` never resolves, so the task sleeps until dropped.
+            return core::future::pending().await;
         }
         // Event-driven: awaits channel (zero wakeups until data arrives).
         // Hub sends None (poison pill) on shutdown to unblock all pipes.
