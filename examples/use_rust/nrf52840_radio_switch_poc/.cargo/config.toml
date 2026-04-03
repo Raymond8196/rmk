@@ -1,0 +1,8 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# No probe — flash via DFU .zip
+# runner = "probe-rs run --chip nRF52840_xxAA"
+
+linker = "flip-link"
+
+[build]
+target = "thumbv7em-none-eabihf"

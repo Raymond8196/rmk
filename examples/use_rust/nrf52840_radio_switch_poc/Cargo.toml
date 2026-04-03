@@ -1,0 +1,64 @@
+[package]
+name = "nrf52840-radio-switch-poc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Gazell FFI (C shim + Nordic SDK)
+rmk-gazell-sys = { path = "../../../rmk-gazell-sys", features = ["nrf52840"] }
+
+# BLE stack (nrf-sdc MPSL) — NO defmt to avoid conflict with log
+nrf-sdc = { git = "https://github.com/haobogu/nrf-sdc", rev = "ffe59a7aefaaa145a3d2474602f33387f80dcefa", default-features = false, features = [
+    "peripheral",
+    "nrf52840",
+] }
+nrf-mpsl = { git = "https://github.com/haobogu/nrf-sdc", rev = "ffe59a7aefaaa145a3d2474602f33387f80dcefa", default-features = false, features = [
+    "critical-section-impl",
+    "nrf52840",
+] }
+
+# Embassy async runtime
+embassy-executor = { version = "0.10", features = [
+    "platform-cortex-m",
+    "executor-thread",
+] }
+embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
+embassy-nrf = { version = "0.10", features = [
+    "nrf52840",
+    "time-driver-rtc1",
+    "gpiote",
+    "unstable-pac",
+    "nfc-pins-as-gpio",
+    "time",
+] }
+embassy-usb = "0.6"
+embassy-usb-logger = "0.6"
+embassy-futures = "0.1"
+
+# BLE HCI
+bt-hci = "0.8"
+
+# Logging via USB CDC (not defmt)
+log = "0.4"
+
+# Core embedded
+# Note: critical-section is provided by nrf-mpsl's critical-section-impl feature,
+# NOT by cortex-m's single-core implementation (they conflict at link time).
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+panic-halt = "1.0"
+static_cell = "2"
+
+[profile.dev]
+codegen-units = 1
+debug = true
+opt-level = 1
+overflow-checks = true
+lto = false
+
+[profile.release]
+codegen-units = 1
+debug = true
+opt-level = "z"
+overflow-checks = false
+lto = "fat"
