@@ -35,7 +35,12 @@ embassy-usb = "0.6"
 embassy-usb-logger = "0.6"
 embassy-futures = "0.1"
 
-# BLE HCI
+# BLE host stack (trouble-host)
+trouble-host = { git = "https://github.com/haobogu/trouble", rev = "e96bdadda8806b1f6257978549746a516f73cf3d", features = [
+    "peripheral",
+    "gatt",
+    "log",
+] }
 bt-hci = "0.8"
 
 # Logging via USB CDC (not defmt)
