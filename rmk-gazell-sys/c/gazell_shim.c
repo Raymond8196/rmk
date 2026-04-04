@@ -27,6 +27,7 @@ static struct {
     // TX state (device mode)
     volatile bool tx_success;
     volatile bool tx_failed;
+    volatile bool tx_pending;  // true while a non-blocking TX is in flight
 
     // ACK payload state (device mode: payload received in ACK from host)
     uint8_t ack_payload_buffer[MAX_PAYLOAD_LENGTH];
@@ -186,6 +187,7 @@ gz_error_t gz_init(const gz_config_t* config) {
     gz_state.rx_pipe = 0;
     gz_state.tx_success = false;
     gz_state.tx_failed = false;
+    gz_state.tx_pending = false;
     gz_state.ack_payload_ready = false;
     gz_state.ack_payload_length = 0;
 
@@ -436,6 +438,7 @@ gz_error_t gz_flush(void) {
     gz_state.rx_pipe = 0;
     gz_state.tx_success = false;
     gz_state.tx_failed = false;
+    gz_state.tx_pending = false;
     gz_state.ack_payload_ready = false;
     gz_state.ack_payload_length = 0;
 
@@ -456,6 +459,7 @@ void gz_deinit(void) {
         gz_state.rx_pipe = 0;
         gz_state.tx_success = false;
         gz_state.tx_failed = false;
+        gz_state.tx_pending = false;
         gz_state.ack_payload_ready = false;
         gz_state.ack_payload_length = 0;
     }
@@ -469,6 +473,7 @@ gz_error_t gz_init_default(gz_mode_t mode) {
     gz_state.rx_pipe = 0;
     gz_state.tx_success = false;
     gz_state.tx_failed = false;
+    gz_state.tx_pending = false;
     gz_state.ack_payload_ready = false;
     gz_state.ack_payload_length = 0;
     nrf_gzll_mode_t nrf_mode = (mode == GZ_MODE_HOST)
@@ -485,4 +490,61 @@ gz_error_t gz_init_default(gz_mode_t mode) {
     gz_state.initialized = true;
     gz_state.mode = mode;
     return GZ_OK;
+}
+
+//-----------------------------------------------------------------------------
+// Non-blocking TX API
+//-----------------------------------------------------------------------------
+
+gz_error_t gz_send_start(const uint8_t* data, uint8_t len, uint8_t pipe) {
+    if (!gz_state.initialized) {
+        return GZ_ERR_NOT_INITIALIZED;
+    }
+
+    if (data == NULL) {
+        return GZ_ERR_INVALID_CONFIG;
+    }
+
+    if (len == 0 || len > MAX_PAYLOAD_LENGTH) {
+        return GZ_ERR_FRAME_TOO_LARGE;
+    }
+
+    if (pipe > 7) {
+        return GZ_ERR_INVALID_CONFIG;
+    }
+
+    if (gz_state.mode != GZ_MODE_DEVICE) {
+        return GZ_ERR_INVALID_CONFIG;
+    }
+
+    // Reject if a TX is already in flight
+    if (gz_state.tx_pending) {
+        return GZ_ERR_BUSY;
+    }
+
+    // Clear TX flags and ACK payload state
+    gz_state.tx_success = false;
+    gz_state.tx_failed = false;
+    gz_state.ack_payload_ready = false;
+    gz_state.tx_pending = true;
+
+    // Add packet to TX FIFO — non-blocking, returns immediately
+    if (!nrf_gzll_add_packet_to_tx_fifo(pipe, (uint8_t*)data, len)) {
+        gz_state.tx_pending = false;
+        return GZ_ERR_BUSY;  // FIFO full
+    }
+
+    return GZ_OK;  // Enqueued — poll gz_poll_tx_status() for result
+}
+
+gz_tx_status_t gz_poll_tx_status(void) {
+    if (gz_state.tx_success) {
+        gz_state.tx_pending = false;
+        return GZ_TX_SUCCESS;
+    }
+    if (gz_state.tx_failed) {
+        gz_state.tx_pending = false;
+        return GZ_TX_FAILED;
+    }
+    return GZ_TX_PENDING;
 }

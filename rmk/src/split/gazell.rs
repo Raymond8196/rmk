@@ -142,14 +142,22 @@ impl GazellPeripheralDriver {
         // Mock: no ACK payload on host
     }
 
-    /// Send raw bytes via Gazell with retry on BUSY.
+    /// Send raw bytes via Gazell (non-blocking enqueue + async poll).
+    ///
+    /// Enqueues the packet into the Gazell TX FIFO via `gz_send_start()`,
+    /// then polls `gz_poll_tx_status()` with async yields between checks.
+    /// This avoids blocking the Embassy executor during TX (~6ms worst case).
+    ///
+    /// Poll timing: 500µs intervals match the typical Gazell timeslot period
+    /// (600µs at 2Mbps default). Most successful TXs complete in 1-2 polls.
     #[cfg(feature = "wireless_gazell")]
     async fn raw_send(&self, data: &[u8]) -> Result<(), SplitDriverError> {
+        // Enqueue phase: retry on BUSY (FIFO full or previous TX in flight)
         for attempt in 0..MAX_SEND_RETRIES {
             // SAFETY: data points to valid memory of data.len() bytes.
-            let ret = unsafe { sys::gz_send(data.as_ptr(), data.len() as u8, self.pipe) };
+            let ret = unsafe { sys::gz_send_start(data.as_ptr(), data.len() as u8, self.pipe) };
             if ret == sys::GZ_OK {
-                return Ok(());
+                break;
             }
             if ret == sys::GZ_ERR_BUSY && attempt < MAX_SEND_RETRIES - 1 {
                 Timer::after_millis(1).await;
@@ -157,6 +165,21 @@ impl GazellPeripheralDriver {
             }
             return Err(SplitDriverError::SerialError);
         }
+
+        // Poll phase: check TX completion with async yields.
+        // 500µs interval ≈ 1 Gazell timeslot; 40 iterations = 20ms timeout.
+        for _ in 0..40 {
+            // SAFETY: gz_poll_tx_status() reads volatile flags, no pointer args.
+            let status = unsafe { sys::gz_poll_tx_status() };
+            match status {
+                sys::GZ_TX_SUCCESS => return Ok(()),
+                sys::GZ_TX_FAILED => return Err(SplitDriverError::SerialError),
+                _ => Timer::after_micros(500).await, // Yield to executor
+            }
+        }
+        // Timeout: flush to reset tx_pending and clear stale FIFO state,
+        // so the next gz_send_start() is not permanently blocked.
+        let _ = unsafe { sys::gz_flush() };
         Err(SplitDriverError::SerialError)
     }
 

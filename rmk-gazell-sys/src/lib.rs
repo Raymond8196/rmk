@@ -23,6 +23,12 @@ pub type gz_mode_t = i32;
 pub const GZ_MODE_DEVICE: gz_mode_t = 0;
 pub const GZ_MODE_HOST: gz_mode_t = 1;
 
+/// TX completion status returned by `gz_poll_tx_status()`
+pub type gz_tx_status_t = i32;
+pub const GZ_TX_SUCCESS: gz_tx_status_t = 0;
+pub const GZ_TX_PENDING: gz_tx_status_t = 1;
+pub const GZ_TX_FAILED: gz_tx_status_t = -1;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct gz_config_t {
@@ -38,13 +44,13 @@ pub struct gz_config_t {
 impl Default for gz_config_t {
     fn default() -> Self {
         Self {
-            channel: 4,                               // Nordic Gazell default channel
-            data_rate: 2,                              // 2Mbps (Nordic default)
-            tx_power: 4,                               // +4 dBm
+            channel: 4,   // Nordic Gazell default channel
+            data_rate: 2, // 2Mbps (Nordic default)
+            tx_power: 4,  // +4 dBm
             max_retries: 5,
             ack_timeout_us: 600,
-            base_address: [0xE7, 0xE7, 0xE7, 0xE7],   // Nordic Gazell default base address
-            address_prefix: 0xC0,                      // Nordic Gazell default prefix for pipe 0
+            base_address: [0xE7, 0xE7, 0xE7, 0xE7], // Nordic Gazell default base address
+            address_prefix: 0xC0,                   // Nordic Gazell default prefix for pipe 0
         }
     }
 }
@@ -62,6 +68,8 @@ extern "C" {
     pub fn gz_set_ack_payload(pipe: u8, data: *const u8, len: u8) -> gz_error_t;
     pub fn gz_get_ack_payload(out_buf: *mut u8, out_len: *mut u8, max_len: u8) -> gz_error_t;
     pub fn gz_init_default(mode: gz_mode_t) -> gz_error_t;
+    pub fn gz_send_start(data: *const u8, len: u8, pipe: u8) -> gz_error_t;
+    pub fn gz_poll_tx_status() -> gz_tx_status_t;
 }
 
 // On non-ARM targets: stubs so host builds (cargo test, cargo doc, IDEs) link successfully.
@@ -165,4 +173,21 @@ pub unsafe fn gz_get_ack_payload(_out_buf: *mut u8, _out_len: *mut u8, _max_len:
 #[cfg(not(target_arch = "arm"))]
 pub unsafe fn gz_init_default(_mode: gz_mode_t) -> gz_error_t {
     GZ_ERR_HARDWARE
+}
+
+/// # Safety
+///
+/// Stub for non-ARM. On real hardware, enqueues a TX packet (non-blocking).
+/// `data` must point to valid memory of at least `len` bytes.
+#[cfg(not(target_arch = "arm"))]
+pub unsafe fn gz_send_start(_data: *const u8, _len: u8, _pipe: u8) -> gz_error_t {
+    GZ_ERR_HARDWARE
+}
+
+/// # Safety
+///
+/// Stub for non-ARM. On real hardware, polls TX completion status.
+#[cfg(not(target_arch = "arm"))]
+pub unsafe fn gz_poll_tx_status() -> gz_tx_status_t {
+    GZ_TX_FAILED
 }

@@ -143,6 +143,43 @@ gz_error_t gz_init_default(gz_mode_t mode);
  */
 void gz_deinit(void);
 
+// ---------------------------------------------------------------------------
+// Non-blocking TX API (for async / RTOS integration)
+// ---------------------------------------------------------------------------
+
+/// TX completion status returned by gz_poll_tx_status()
+typedef enum {
+    GZ_TX_PENDING = 1,   ///< TX in progress, poll again later
+    GZ_TX_SUCCESS = 0,   ///< TX completed, ACK received
+    GZ_TX_FAILED = -1,   ///< TX failed (max retries exceeded or timeout)
+} gz_tx_status_t;
+
+/**
+ * @brief Enqueue a frame for transmission (non-blocking)
+ *
+ * Validates parameters, adds the packet to the TX FIFO, and returns
+ * immediately.  Call gz_poll_tx_status() to check completion.
+ *
+ * Only one TX operation can be in flight at a time.  Calling this
+ * while a previous TX is still pending returns GZ_ERR_BUSY.
+ *
+ * @param data Pointer to data buffer
+ * @param len  Length of data (1-32 bytes)
+ * @param pipe Pipe number (0-7)
+ * @return GZ_OK if enqueued, GZ_ERR_BUSY if FIFO full or TX pending
+ */
+gz_error_t gz_send_start(const uint8_t* data, uint8_t len, uint8_t pipe);
+
+/**
+ * @brief Poll the status of the last gz_send_start() operation
+ *
+ * After GZ_TX_SUCCESS, the ACK payload (if any) is available via
+ * gz_get_ack_payload().
+ *
+ * @return GZ_TX_PENDING, GZ_TX_SUCCESS, or GZ_TX_FAILED
+ */
+gz_tx_status_t gz_poll_tx_status(void);
+
 #ifdef __cplusplus
 }
 #endif
