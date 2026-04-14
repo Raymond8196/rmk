@@ -100,7 +100,7 @@ English Version | [中文版本](./CLAUDE.zh.md)
 | Storage gate analysis (already works, no change needed) | ✅ Done |
 | Remove `compile_error!`, split entry functions per transport | ✅ Done |
 | Dynamic RADIO interrupt dispatcher | ✅ Done + HW verified |
-| BLE stack encapsulation (trouble-host pause/restart) | ⬜ Phase 4.2 |
+| BLE stack encapsulation (trouble-host pause/restart) | ✅ Done + HW verified |
 | Unified ConnectionManager + keycode switching | ⬜ Phase 4.3 |
 
 **Architecture decisions**:
@@ -588,6 +588,21 @@ When BLE (MPSL) and Gazell coexist, shared interrupts (RADIO, EGU0_SWI0) need ru
 - [ ] No `Co-Authored-By: Claude` in commit
 - [ ] No `println!` or debug-only code left in
 
+### 11. Windows Development: nrf-sdc Symlink + LLVM/bindgen
+
+Two issues when building BLE examples on Windows:
+
+1. **nrf-sdc `third_party` symlink**: `nrf-sdc-sys/third_party` is a relative symlink (`../nrf-mpsl-sys/third_party`). Cargo's git checkout on Windows does not resolve git symlinks — the checkout contains a 27-byte file instead of a directory. **Fix**: Clone nrf-sdc separately, checkout the correct rev, then replace the symlink with a Windows junction: `mklink /J third_party ..\nrf-mpsl-sys\third_party`. Then use path dependencies in Cargo.toml instead of git URLs.
+
+2. **bindgen requires `LIBCLANG_PATH`**: `nrf-mpsl-sys` and `nrf-sdc-sys` use `bindgen` which needs `libclang.dll`. VS2022's bundled LLVM is incomplete (only clang-format/clang-tidy). Must install full LLVM (`winget install LLVM.LLVM`) and set `LIBCLANG_PATH=C:\Program Files\LLVM\bin`. The env var must propagate to build scripts — use `setx` (permanent) or PowerShell `$env:LIBCLANG_PATH` (per-session).
+
+### 12. Embassy 0.9→0.10 Breaking Changes
+
+When upgrading examples from embassy 0.9 to 0.10:
+- `embassy-executor`: `arch-cortex-m` → `platform-cortex-m`
+- `embassy-nrf`: 0.9 → 0.10 (unified, same feature names)
+- `nrf-pac`: 0.2.x → 0.3.x (must enable correct chip feature, e.g. `nrf52840`, or `build.rs` panics with "No nrfxx Cargo feature enabled")
+
 ---
 
 ## Working with Uncertainty
@@ -685,3 +700,10 @@ When CI fails but local checks pass, the environment differs. Common issues:
   - HW verified on E104-BT5040U dongle: Gazell x2 → BLE advertise (visible on nRF Connect) → Gazell x1, zero crashes
   - Resolved: critical-section link conflict (nrf-mpsl vs cortex-m), BINDGEN_EXTRA_CLANG_ARGS for ARM cross-compile
   - Binary size: 87KB (Gazell + BLE + USB CDC in one firmware)
+- 2026-04-14: Branch sync + embassy upgrade + Phase 4.2 HW verified
+  - Switched to `feat/gazell-rebase` branch (from `myfork` remote)
+  - Fixed `nrf52840_gazell_split` Cargo.toml: embassy-executor 0.9→0.10, embassy-nrf 0.9→0.10, `arch-cortex-m`→`platform-cortex-m`
+  - Installed LLVM (for bindgen/libclang), fixed nrf-sdc symlink issue on Windows (junction replacement)
+  - Changed `radio_switch_poc` to use path dependency for nrf-sdc (workaround for Windows symlink in cargo git checkout)
+  - Phase 4.2 HW verified on E104-BT5040U dongle: BLE↔Gazell hot-switching ALL CYCLES PASSED
+  - Gazell central USB HID enumeration confirmed: shows as HID device in Windows Device Manager

@@ -15,13 +15,13 @@ rmk = { path = "../../../rmk", default-features = false, features = [
 rmk-gazell-sys = { path = "../../../rmk-gazell-sys", features = ["nrf52840"] }
 
 # Embassy async runtime
-embassy-executor = { version = "0.9", features = [
+embassy-executor = { version = "0.10", features = [
     "defmt",
-    "arch-cortex-m",
+    "platform-cortex-m",
     "executor-thread",
 ] }
 embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
-embassy-nrf = { version = "0.9", features = [
+embassy-nrf = { version = "0.10", features = [
     "defmt",
     "nrf52840",
     "time-driver-rtc1",
