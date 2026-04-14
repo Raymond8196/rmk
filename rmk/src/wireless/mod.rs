@@ -5,5 +5,11 @@
 
 pub mod config;
 
+#[cfg(feature = "wireless_gazell")]
+pub mod radio_dispatch;
+
+#[cfg(all(feature = "wireless_gazell", feature = "_ble"))]
+pub mod connection_manager;
+
 // Re-export commonly used types
 pub use config::GazellConfig;

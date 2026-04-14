@@ -76,7 +76,10 @@ fn expand_bind_interrupt_for_split_peripheral(
     hardware: &Hardware,
     peripheral_id: usize,
 ) -> TokenStream2 {
-    // Gazell: generate ISR bridges for RADIO/TIMER2/EGU0_SWI0 instead of BLE bindings
+    // Gazell peripherals use static ISR bridges (not dynamic dispatch).
+    // Rationale: peripherals don't initiate RADIO mode switches — the central
+    // controls protocol switching and communicates mode changes via ACK payloads.
+    // This avoids the overhead of atomic dispatch in the peripheral's ISR path.
     if let BoardConfig::Split(split_config) = &hardware.board {
         if split_config.connection == "gazell" {
             if chip.series == ChipSeries::Nrf52 {

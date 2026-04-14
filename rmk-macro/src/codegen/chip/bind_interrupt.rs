@@ -103,8 +103,160 @@ pub(crate) fn bind_interrupt_default(hardware: &Hardware, item_mod: &ItemMod) ->
             }
         }
         rmk_config::resolved::hardware::ChipSeries::Nrf52 => {
-            // Gazell central: generate ISR bridges instead of BLE/MPSL bindings
             if let BoardConfig::Split(split_config) = board {
+                // Phase 4.3 (not yet active): Dynamic BLE+Gazell coexistence.
+                // ISR dispatches to either stack at runtime based on RADIO_MODE/EGU0_MODE atomics.
+                // NOTE: entry.rs and peripheral.rs do NOT yet handle "gazell_ble", so this branch
+                // is unreachable until Phase 4.3 adds the full ConnectionManager integration.
+                if split_config.connection == "gazell_ble" {
+                    let usb_interrupt = if let Some(usb_info) = communication.get_usb_info() {
+                        let interrupt_name = format_ident!("{}", usb_info.interrupt_name);
+                        let peripheral_name = format_ident!("{}", usb_info.peripheral_name);
+                        quote! {
+                            use ::embassy_nrf::bind_interrupts;
+                            bind_interrupts!(struct Irqs {
+                                #interrupt_name => ::embassy_nrf::usb::InterruptHandler<::embassy_nrf::peripherals::#peripheral_name>;
+                                CLOCK_POWER => ::nrf_sdc::mpsl::ClockInterruptHandler, ::embassy_nrf::usb::vbus_detect::InterruptHandler;
+                            });
+                        }
+                    } else {
+                        quote! {
+                            use ::embassy_nrf::bind_interrupts;
+                            bind_interrupts!(struct Irqs {
+                                CLOCK_POWER => ::nrf_sdc::mpsl::ClockInterruptHandler;
+                            });
+                        }
+                    };
+
+                    return quote! {
+                        use core::sync::atomic::Ordering;
+                        use ::embassy_nrf::interrupt::{self, InterruptExt, typelevel};
+                        use ::rmk::wireless::radio_dispatch::{RADIO_MODE, EGU0_MODE, RadioMode};
+
+                        // --- MPSL initialization guard ---
+                        static MPSL_INITIALIZED: core::sync::atomic::AtomicBool =
+                            core::sync::atomic::AtomicBool::new(false);
+
+                        // --- External ISR handlers from linked libraries ---
+                        unsafe extern "C" {
+                            fn RADIO_IRQHandler();
+                            fn TIMER2_IRQHandler();
+                            fn SWI0_EGU0_IRQHandler();
+                        }
+
+                        // --- Dynamic RADIO interrupt dispatcher ---
+                        // Routes RADIO IRQ to Gazell or MPSL based on current mode.
+                        #[::embassy_nrf::pac::interrupt]
+                        fn RADIO() {
+                            match RADIO_MODE.load(Ordering::Relaxed) {
+                                x if x == RadioMode::Gazell as u8 => unsafe { RADIO_IRQHandler() },
+                                x if x == RadioMode::Ble as u8 => {
+                                    if MPSL_INITIALIZED.load(Ordering::Relaxed) {
+                                        unsafe { ::nrf_sdc::mpsl::raw::MPSL_IRQ_RADIO_Handler() }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        // Gazell-only: TIMER2 is not shared with MPSL.
+                        #[::embassy_nrf::pac::interrupt]
+                        fn TIMER2() {
+                            if RADIO_MODE.load(Ordering::Relaxed) == RadioMode::Gazell as u8 {
+                                unsafe { TIMER2_IRQHandler() }
+                            }
+                        }
+
+                        // MPSL-only: TIMER0/RTC0 are not shared with Gazell.
+                        #[::embassy_nrf::pac::interrupt]
+                        fn TIMER0() {
+                            if MPSL_INITIALIZED.load(Ordering::Relaxed) {
+                                unsafe { ::nrf_sdc::mpsl::raw::MPSL_IRQ_TIMER0_Handler() }
+                            }
+                        }
+
+                        #[::embassy_nrf::pac::interrupt]
+                        fn RTC0() {
+                            if MPSL_INITIALIZED.load(Ordering::Relaxed) {
+                                unsafe { ::nrf_sdc::mpsl::raw::MPSL_IRQ_RTC0_Handler() }
+                            }
+                        }
+
+                        // Dynamic EGU0_SWI0 interrupt dispatcher.
+                        #[::embassy_nrf::pac::interrupt]
+                        fn EGU0_SWI0() {
+                            match EGU0_MODE.load(Ordering::Relaxed) {
+                                x if x == RadioMode::Gazell as u8 => unsafe { SWI0_EGU0_IRQHandler() },
+                                x if x == RadioMode::Ble as u8 => {
+                                    if MPSL_INITIALIZED.load(Ordering::Relaxed) {
+                                        unsafe {
+                                            <::nrf_sdc::mpsl::LowPrioInterruptHandler as typelevel::Handler<typelevel::EGU0_SWI0>>::on_interrupt();
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        // --- Manual MPSL Binding impls (bypass bind_interrupts!) ---
+                        #[derive(Copy, Clone)]
+                        struct MpslIrqs;
+                        unsafe impl typelevel::Binding<typelevel::RADIO, ::nrf_sdc::mpsl::HighPrioInterruptHandler> for MpslIrqs {}
+                        unsafe impl typelevel::Binding<typelevel::TIMER0, ::nrf_sdc::mpsl::HighPrioInterruptHandler> for MpslIrqs {}
+                        unsafe impl typelevel::Binding<typelevel::RTC0, ::nrf_sdc::mpsl::HighPrioInterruptHandler> for MpslIrqs {}
+                        unsafe impl typelevel::Binding<typelevel::EGU0_SWI0, ::nrf_sdc::mpsl::LowPrioInterruptHandler> for MpslIrqs {}
+
+                        // --- Mode switching functions ---
+                        fn switch_to_gazell() {
+                            interrupt::RADIO.disable();
+                            interrupt::EGU0_SWI0.disable();
+                            interrupt::RADIO.unpend();
+                            interrupt::EGU0_SWI0.unpend();
+                            interrupt::TIMER2.unpend();
+                            RADIO_MODE.store(RadioMode::Gazell as u8, Ordering::SeqCst);
+                            EGU0_MODE.store(RadioMode::Gazell as u8, Ordering::SeqCst);
+                            interrupt::RADIO.set_priority(interrupt::Priority::P0);
+                            interrupt::TIMER2.set_priority(interrupt::Priority::P0);
+                            interrupt::EGU0_SWI0.set_priority(interrupt::Priority::P1);
+                            unsafe {
+                                interrupt::RADIO.enable();
+                                interrupt::EGU0_SWI0.enable();
+                            }
+                        }
+
+                        fn switch_to_ble() {
+                            interrupt::RADIO.disable();
+                            interrupt::EGU0_SWI0.disable();
+                            interrupt::RADIO.unpend();
+                            interrupt::EGU0_SWI0.unpend();
+                            RADIO_MODE.store(RadioMode::Ble as u8, Ordering::SeqCst);
+                            EGU0_MODE.store(RadioMode::Ble as u8, Ordering::SeqCst);
+                            interrupt::RADIO.set_priority(interrupt::Priority::P0);
+                            interrupt::TIMER0.set_priority(interrupt::Priority::P0);
+                            interrupt::RTC0.set_priority(interrupt::Priority::P0);
+                            interrupt::EGU0_SWI0.set_priority(interrupt::Priority::P4);
+                            unsafe {
+                                interrupt::RADIO.enable();
+                                interrupt::EGU0_SWI0.enable();
+                            }
+                        }
+
+                        fn switch_to_idle() {
+                            interrupt::RADIO.disable();
+                            interrupt::EGU0_SWI0.disable();
+                            interrupt::RADIO.unpend();
+                            interrupt::EGU0_SWI0.unpend();
+                            interrupt::TIMER2.unpend();
+                            RADIO_MODE.store(RadioMode::Idle as u8, Ordering::SeqCst);
+                            EGU0_MODE.store(RadioMode::Idle as u8, Ordering::SeqCst);
+                        }
+
+                        #usb_interrupt
+                        #extern_irqs
+                    };
+                }
+
+                // Gazell-only: generate static ISR bridges (no BLE coexistence)
                 if split_config.connection == "gazell" {
                     let usb_interrupt = if let Some(usb_info) = communication.get_usb_info() {
                         let interrupt_name = format_ident!("{}", usb_info.interrupt_name);

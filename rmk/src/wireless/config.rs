@@ -339,4 +339,64 @@ mod tests {
         config.max_retries = 16; // Out of range
         assert!(!config.validate());
     }
+
+    #[test]
+    fn test_invalid_ack_timeout_below() {
+        let mut config = GazellConfig::default();
+        config.ack_timeout_us = 249; // Below minimum 250
+        assert!(!config.validate());
+    }
+
+    #[test]
+    fn test_invalid_ack_timeout_above() {
+        let mut config = GazellConfig::default();
+        config.ack_timeout_us = 4001; // Above maximum 4000
+        assert!(!config.validate());
+    }
+
+    #[test]
+    fn test_invalid_pipe() {
+        let mut config = GazellConfig::default();
+        config.pipe = 8; // Above maximum 7
+        assert!(!config.validate());
+    }
+
+    #[test]
+    fn test_idle_heartbeat_must_be_slower() {
+        let mut config = GazellConfig::default();
+        // Active=200ms, idle=100ms — idle should be >= active
+        config.heartbeat_interval_ms = 200;
+        config.idle_heartbeat_interval_ms = 100;
+        assert!(!config.validate());
+    }
+
+    #[test]
+    fn test_deep_idle_must_exceed_idle() {
+        let mut config = GazellConfig::default();
+        // idle_timeout=5000ms, deep_idle=3s (3000ms) — deep idle should be longer
+        config.idle_timeout_ms = 5000;
+        config.deep_idle_timeout_secs = 3;
+        assert!(!config.validate());
+    }
+
+    #[test]
+    fn test_boundary_channel_0() {
+        let mut config = GazellConfig::default();
+        config.channel = 0;
+        assert!(config.validate());
+    }
+
+    #[test]
+    fn test_boundary_channel_100() {
+        let mut config = GazellConfig::default();
+        config.channel = 100;
+        assert!(config.validate());
+    }
+
+    #[test]
+    fn test_zero_idle_heartbeat_valid() {
+        let mut config = GazellConfig::default();
+        config.idle_heartbeat_interval_ms = 0; // Disable idle heartbeat
+        assert!(config.validate());
+    }
 }

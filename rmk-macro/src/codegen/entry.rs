@@ -194,7 +194,7 @@ pub(crate) fn rmk_entry_select(
                 join_all_tasks(tasks)
             } else {
                 panic!(
-                    "Invalid split connection type: {}, only \"ble\", \"serial\" and \"gazell\" are supported",
+                    "Invalid split connection type: {}, only \"ble\", \"serial\" and \"gazell\" are supported (\"gazell_ble\" is planned for Phase 4.3)",
                     split_config.connection
                 );
             }
