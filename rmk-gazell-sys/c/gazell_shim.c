@@ -530,6 +530,24 @@ void gz_deinit(void) {
         NRF_RADIO->EVENTS_PHYEND     = 0;
         NRF_RADIO->EVENTS_RATEBOOST  = 0;
 
+        // ── Clear PPI channels used by Gazell ──
+        // Gazell connects RADIO events to TIMER2 via PPI channels.
+        // Default resources: channels 0,1,2 (mask 0x07).
+        // Alternative resources: channels 8,9,10 (mask 0x700).
+        // These must be disabled so MPSL/SDC can use RADIO without interference.
+        {
+            // Disable both default and alternative PPI channel sets
+            uint32_t ch_mask = 0x00000007uL | 0x00000700uL;  // channels 0-2, 8-10
+            NRF_PPI->CHENCLR = ch_mask;
+            // Clear endpoint registers for each channel
+            for (uint32_t ch = 0; ch < 20; ch++) {
+                if (ch_mask & (1u << ch)) {
+                    NRF_PPI->CH[ch].EEP = 0;
+                    NRF_PPI->CH[ch].TEP = 0;
+                }
+            }
+        }
+
         // ── Clear software state ──
         gz_state.initialized = false;
         gz_state.rx_ready = false;

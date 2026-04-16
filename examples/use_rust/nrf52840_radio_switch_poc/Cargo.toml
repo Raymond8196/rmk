@@ -33,6 +33,7 @@ embassy-nrf = { version = "0.10", features = [
 ] }
 embassy-usb = "0.6"
 embassy-futures = "0.1"
+embassy-sync = "0.7"
 
 # BLE host stack (trouble-host)
 trouble-host = { git = "https://github.com/haobogu/trouble", rev = "e96bdadda8806b1f6257978549746a516f73cf3d", features = [
