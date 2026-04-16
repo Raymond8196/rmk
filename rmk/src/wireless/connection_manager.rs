@@ -1,7 +1,11 @@
-//! Phase 4.3: Connection Manager architecture (interface only)
+//! Phase 4.3: Connection Manager architecture (**interface only — not yet implemented**)
 //!
 //! Manages dynamic switching between Gazell 2.4GHz and BLE connections
 //! on nRF52840-based split keyboards.
+//!
+//! **Status**: Design types and constants only. No runtime logic.
+//! The `gazell_ble` config path in codegen rejects this at compile time.
+//! This module will be activated when Phase 4.3 implementation begins.
 //!
 //! # Architecture Overview
 //!

@@ -9,6 +9,10 @@
 #define MAX_PAYLOAD_LENGTH 32
 
 // Internal state management
+//
+// Fields written by ISR callbacks (nrf_gzll_device_tx_success, etc.) must be
+// volatile so the compiler does not cache stale values in registers when
+// reading from the main (non-ISR) context.
 static struct {
     bool initialized;
     gz_mode_t mode;
@@ -18,20 +22,20 @@ static struct {
     // gz_init() so gz_set_mode() can re-apply it after reinit.
     gz_config_t saved_config;
 
-    // RX state (host mode)
-    uint8_t rx_buffer[MAX_PAYLOAD_LENGTH];
-    uint32_t rx_length;
-    uint8_t rx_pipe;           // Pipe the last RX packet came from
+    // RX state (host mode) — written by ISR callback nrf_gzll_host_rx_data_ready
+    volatile uint8_t rx_buffer[MAX_PAYLOAD_LENGTH];
+    volatile uint32_t rx_length;
+    volatile uint8_t rx_pipe;  // Pipe the last RX packet came from
     volatile bool rx_ready;
 
-    // TX state (device mode)
+    // TX state (device mode) — written by ISR callbacks
     volatile bool tx_success;
     volatile bool tx_failed;
     volatile bool tx_pending;  // true while a non-blocking TX is in flight
 
-    // ACK payload state (device mode: payload received in ACK from host)
-    uint8_t ack_payload_buffer[MAX_PAYLOAD_LENGTH];
-    uint8_t ack_payload_length;
+    // ACK payload state (device mode) — written by ISR nrf_gzll_device_tx_success
+    volatile uint8_t ack_payload_buffer[MAX_PAYLOAD_LENGTH];
+    volatile uint8_t ack_payload_length;
     volatile bool ack_payload_ready;
 } gz_state = {0};
 
@@ -54,13 +58,12 @@ void nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info
 
     // Check if ACK carried payload data from host
     if (tx_info.payload_received_in_ack) {
-        // SAFETY: nrf_gzll_fetch_packet_from_rx_fifo expects uint32_t* for length,
-        // but gz_state.ack_payload_length is uint8_t (max 32 bytes). Use temporary.
         uint32_t temp_len = MAX_PAYLOAD_LENGTH;
         if (nrf_gzll_fetch_packet_from_rx_fifo(pipe,
-                                                gz_state.ack_payload_buffer,
+                                                (uint8_t*)gz_state.ack_payload_buffer,
                                                 &temp_len)) {
             gz_state.ack_payload_length = (uint8_t)temp_len;
+            // Set ack_payload_ready LAST — acts as release fence for data above
             gz_state.ack_payload_ready = true;
         }
     }
@@ -85,12 +88,26 @@ void nrf_gzll_device_tx_failed(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info)
 void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info) {
     (void)rx_info;
 
+    // Only overwrite buffer if the main loop has consumed the previous packet
+    // (rx_ready == false).  If the main loop hasn't read yet, we must still
+    // fetch from the FIFO to prevent it from filling up, but we discard the
+    // data to avoid corrupting an in-progress read.
+    if (gz_state.rx_ready) {
+        // Previous data not yet consumed — fetch and discard to drain FIFO
+        uint8_t discard[MAX_PAYLOAD_LENGTH];
+        uint32_t discard_len = MAX_PAYLOAD_LENGTH;
+        nrf_gzll_fetch_packet_from_rx_fifo(pipe, discard, &discard_len);
+        return;
+    }
+
     // Fetch the packet from RX FIFO and record which pipe it came from
-    gz_state.rx_length = MAX_PAYLOAD_LENGTH;
+    uint32_t temp_len = MAX_PAYLOAD_LENGTH;
     if (nrf_gzll_fetch_packet_from_rx_fifo(pipe,
-                                            gz_state.rx_buffer,
-                                            &gz_state.rx_length)) {
+                                            (uint8_t*)gz_state.rx_buffer,
+                                            &temp_len)) {
+        gz_state.rx_length = temp_len;
         gz_state.rx_pipe = (uint8_t)pipe;
+        // Set rx_ready LAST — acts as a release fence for the data above
         gz_state.rx_ready = true;
     }
 }
@@ -232,17 +249,20 @@ gz_error_t gz_set_mode(gz_mode_t mode) {
     // IMPORTANT: nrf_gzll_init() resets ALL settings to defaults.
     // We must re-apply saved config afterwards.
     if (!nrf_gzll_init(nrf_mode)) {
+        gz_state.initialized = false;  // Radio is disabled and init failed
         return GZ_ERR_HARDWARE;
     }
 
     // Re-apply user configuration (lost by nrf_gzll_init)
     gz_error_t err = gz_apply_config(&gz_state.saved_config);
     if (err != GZ_OK) {
+        gz_state.initialized = false;  // Config apply failed, state is inconsistent
         return err;
     }
 
     // Enable Gazell
     if (!nrf_gzll_enable()) {
+        gz_state.initialized = false;
         return GZ_ERR_HARDWARE;
     }
 
@@ -323,19 +343,26 @@ gz_error_t gz_recv(uint8_t* out_buf, uint8_t* out_len, uint8_t* out_pipe, uint8_
         return GZ_OK; // No data available, not an error
     }
 
+    // Claim the data immediately — prevents ISR from overwriting rx_buffer
+    // while we are copying it out.  The ISR checks rx_ready before writing,
+    // so clearing it first makes the copy safe.
+    gz_state.rx_ready = false;
+
+    // Snapshot length (volatile read once)
+    uint32_t len = gz_state.rx_length;
+
     // Check buffer size
-    if (gz_state.rx_length > max_len) {
+    if (len > max_len) {
         return GZ_ERR_FRAME_TOO_LARGE;
     }
 
     // Copy data to output buffer
-    for (uint8_t i = 0; i < gz_state.rx_length; i++) {
+    for (uint8_t i = 0; i < len; i++) {
         out_buf[i] = gz_state.rx_buffer[i];
     }
 
-    *out_len = (uint8_t)gz_state.rx_length;
+    *out_len = (uint8_t)len;
     *out_pipe = gz_state.rx_pipe;
-    gz_state.rx_ready = false;
 
     return GZ_OK;
 }
@@ -391,18 +418,23 @@ gz_error_t gz_get_ack_payload(uint8_t* out_buf, uint8_t* out_len, uint8_t max_le
         return GZ_OK; // No ACK payload, not an error
     }
 
+    // Claim immediately — prevents ISR from overwriting during copy
+    gz_state.ack_payload_ready = false;
+
+    // Snapshot length (volatile read once)
+    uint8_t len = gz_state.ack_payload_length;
+
     // Check buffer size
-    if (gz_state.ack_payload_length > max_len) {
+    if (len > max_len) {
         return GZ_ERR_FRAME_TOO_LARGE;
     }
 
     // Copy ACK payload to output buffer
-    for (uint8_t i = 0; i < gz_state.ack_payload_length; i++) {
+    for (uint8_t i = 0; i < len; i++) {
         out_buf[i] = gz_state.ack_payload_buffer[i];
     }
 
-    *out_len = gz_state.ack_payload_length;
-    gz_state.ack_payload_ready = false;
+    *out_len = len;
 
     return GZ_OK;
 }
@@ -449,11 +481,56 @@ void gz_deinit(void) {
     if (gz_state.initialized) {
         nrf_gzll_disable();
 
-        // Wait for disable to complete
+        // Wait for Gazell protocol state machine to stop
         while (nrf_gzll_is_enabled()) {
             __WFE();
         }
 
+        // ── Clean up RADIO hardware ──
+        // Gazell leaves RADIO registers (SHORTS, INTEN, events) and TIMER2
+        // in a dirty state.  If another radio stack (e.g. MPSL/SDC for BLE)
+        // tries to use the RADIO after this, it will fail unless we reset
+        // the peripheral to a known-clean state.
+
+        // Stop and clear TIMER2 (used by Gazell for timeslot scheduling)
+        NRF_TIMER2->TASKS_STOP  = 1;
+        NRF_TIMER2->TASKS_CLEAR = 1;
+        NRF_TIMER2->INTENCLR    = 0xFFFFFFFF;
+
+        // Disable RADIO and wait for it to actually enter the DISABLED state.
+        // Clear the event first so we don't see a stale event from a previous disable.
+        NRF_RADIO->EVENTS_DISABLED = 0;
+        NRF_RADIO->TASKS_DISABLE = 1;
+        while (NRF_RADIO->EVENTS_DISABLED == 0) {
+            // Busy-wait; RADIO disable takes < 6 µs on nRF52840
+        }
+
+        // Clear all RADIO configuration left by Gazell
+        NRF_RADIO->SHORTS    = 0;
+        NRF_RADIO->INTENCLR  = 0xFFFFFFFF;
+
+        // Clear all pending RADIO events (nRF52840 Product Spec §6.20.2)
+        NRF_RADIO->EVENTS_READY      = 0;
+        NRF_RADIO->EVENTS_ADDRESS    = 0;
+        NRF_RADIO->EVENTS_PAYLOAD    = 0;
+        NRF_RADIO->EVENTS_END        = 0;
+        NRF_RADIO->EVENTS_DISABLED   = 0;
+        NRF_RADIO->EVENTS_DEVMATCH   = 0;
+        NRF_RADIO->EVENTS_DEVMISS    = 0;
+        NRF_RADIO->EVENTS_RSSIEND    = 0;
+        NRF_RADIO->EVENTS_BCMATCH    = 0;
+        NRF_RADIO->EVENTS_CRCOK      = 0;
+        NRF_RADIO->EVENTS_CRCERROR   = 0;
+        NRF_RADIO->EVENTS_FRAMESTART = 0;
+        NRF_RADIO->EVENTS_EDEND      = 0;
+        NRF_RADIO->EVENTS_EDSTOPPED  = 0;
+        NRF_RADIO->EVENTS_TXREADY    = 0;
+        NRF_RADIO->EVENTS_RXREADY    = 0;
+        NRF_RADIO->EVENTS_MHRMATCH   = 0;
+        NRF_RADIO->EVENTS_PHYEND     = 0;
+        NRF_RADIO->EVENTS_RATEBOOST  = 0;
+
+        // ── Clear software state ──
         gz_state.initialized = false;
         gz_state.rx_ready = false;
         gz_state.rx_pipe = 0;

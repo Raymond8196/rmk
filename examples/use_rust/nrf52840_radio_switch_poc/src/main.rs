@@ -11,8 +11,7 @@
 //!
 //! Default boot mode: Gazell
 //!
-//! Key fix: gz_deinit() leaves RADIO hardware in dirty state.
-//! Must explicitly cleanup RADIO + TIMER2 before MPSL can use RADIO again.
+//! gz_deinit() now cleans up RADIO + TIMER2 hardware registers internally.
 
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
@@ -141,42 +140,6 @@ fn switch_to_ble() {
     unsafe {
         interrupt::RADIO.enable();
         interrupt::EGU0_SWI0.enable();
-    }
-}
-
-/// Clean up RADIO + TIMER2 hardware state after gz_deinit().
-/// Gazell leaves RADIO registers, shortcuts, and TIMER2 in dirty state
-/// that prevents MPSL/SDC from using the RADIO.
-fn cleanup_radio_after_gazell() {
-    // Use raw pointer writes to bypass PAC type restrictions.
-    // nRF52840 base addresses: RADIO=0x40001000, TIMER2=0x4000A000
-    let radio: *mut u32 = 0x40001000 as *mut u32;
-    let timer2: *mut u32 = 0x4000A000 as *mut u32;
-
-    unsafe {
-        // TIMER2: TASKS_STOP=0x04, TASKS_CLEAR=0x08, INTENCLR=0x308
-        core::ptr::write_volatile(timer2.offset(0x04 / 4), 1); // TASKS_STOP
-        core::ptr::write_volatile(timer2.offset(0x08 / 4), 1); // TASKS_CLEAR
-        core::ptr::write_volatile(timer2.offset(0x308 / 4), 0xFFFFFFFF); // INTENCLR
-
-        // RADIO: TASKS_DISABLE=0x14, SHORTS=0x20C, INTENCLR=0x304
-        core::ptr::write_volatile(radio.offset(0x14 / 4), 1); // TASKS_DISABLE
-        core::ptr::write_volatile(radio.offset(0x20C / 4), 0); // SHORTS
-        core::ptr::write_volatile(radio.offset(0x304 / 4), 0xFFFFFFFF); // INTENCLR
-
-        // Clear all RADIO events (0x100..0x178, each event at +4)
-        // Events: READY=100, ADDRESS=104, PAYLOAD=108, END=10C, DISABLED=110,
-        // DEVMATCH=114, DEVMISS=118, RSSIEND=11C, BCMATCH=128, CRCOK=130,
-        // CRCERROR=134, FRAMESTART=138, EDEND=13C, EDSTOPPED=140,
-        // RATEBOOST=148, TXREADY=150, RXREADY=154, MHRMATCH=158, SYNC=15C
-        for offset in &[
-            0x100u32, 0x104, 0x108, 0x10C, 0x110,
-            0x114, 0x118, 0x11C, 0x128, 0x130,
-            0x134, 0x138, 0x13C, 0x140,
-            0x148, 0x150, 0x154, 0x158, 0x15C,
-        ] {
-            core::ptr::write_volatile(radio.offset((offset / 4) as isize), 0);
-        }
     }
 }
 
@@ -358,9 +321,8 @@ async fn main(spawner: Spawner) {
                             }
                             cdc_print(&mut cdc, "-> BLE...\r\n").await;
 
-                            // Deinit Gazell + cleanup RADIO hardware
+                            // Deinit Gazell (also cleans up RADIO/TIMER2 hardware)
                             unsafe { rmk_gazell_sys::gz_deinit() };
-                            cleanup_radio_after_gazell();
                             Timer::after_millis(200).await;
                             switch_to_ble();
                             Timer::after_millis(200).await;

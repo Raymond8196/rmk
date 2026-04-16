@@ -339,6 +339,8 @@ fn flush_all_pipes(num_pipes: usize) {
 
 /// Static cancel signal for the central hub.
 /// Signalling this causes `run_gazell_central_hub` to shut down gracefully.
+// TODO(phase4.3): Wire up signal path when ConnectionManager is implemented.
+// Currently defined but never signalled — hub runs indefinitely.
 pub static GAZELL_HUB_CANCEL: Signal<RawMutex, ()> = Signal::new();
 
 /// Run the central Gazell hub: single task that owns `gz_recv()`, dispatches
@@ -474,6 +476,8 @@ impl SplitWriter for PipeDriver {
 
 /// Static cancel signal for the peripheral.
 /// Signalling this causes `run_gazell_split_peripheral` to shut down gracefully.
+// TODO(phase4.3): Wire up signal path when ConnectionManager is implemented.
+// Currently defined but never signalled — peripheral runs indefinitely.
 pub static GAZELL_PERIPHERAL_CANCEL: Signal<RawMutex, ()> = Signal::new();
 
 /// Initialize Gazell and run the split peripheral loop.
